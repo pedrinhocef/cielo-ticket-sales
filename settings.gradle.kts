@@ -24,4 +24,6 @@ dependencyResolutionManagement {
 
 rootProject.name = "Cielo Ticket Sales"
 include(":app")
- 
+include(":core")
+include(":feature:events")
+include(":feature:cielo")
