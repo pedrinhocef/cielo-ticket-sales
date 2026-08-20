@@ -10,10 +10,14 @@
     <string name="new_purchase">New Purchase</string>
     <string name="payment_attention">Payment Attention</string>
     <string name="back_to_list">Back to List</string>
-    <string name="pay_amount">Pay %1$s</string>
+    <plurals name="buy_tickets">
+        <item quantity="one">Buy %1$d ticket - %2$s</item>
+        <item quantity="other">Buy %1$d tickets - %2$s</item>
+    </plurals>
     <string name="error_database">Error saving the transaction to the database.</string>
     <string name="payment_canceled">Payment canceled by user.</string>
     <string name="pending_payment_msg">You have a pending payment for: %1$s</string>
     <string name="retry_payment">Retry Payment</string>
     <string name="error_retry_payment">Could not retry the payment.</string>
+    <string name="event_image_description">Image for %1$s</string>
 </resources>

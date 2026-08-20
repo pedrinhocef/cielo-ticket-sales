@@ -103,6 +103,27 @@ class EventsViewModelTest {
     }
 
     @Test
+    fun `When a persisted payment is pending then should show it instead of creating a new purchase`() {
+        val pendingPurchase = PurchaseEntity(
+            idempotencyKey = "pending-key",
+            eventId = sampleEvent.id,
+            eventName = sampleEvent.title,
+            quantity = 1,
+            totalAmountInCents = sampleEvent.priceInCents,
+            paymentStatus = PurchaseStatus.PENDING,
+            cieloTransactionId = null
+        )
+        savedStateHandle["current_idempotency_key"] = pendingPurchase.idempotencyKey
+        coEvery { purchaseRepository.getPurchase(pendingPurchase.idempotencyKey) } returns pendingPurchase
+
+        viewModel.startPaymentFlow(sampleEvent, quantity = 1)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(UiState.PaymentPending(pendingPurchase), viewModel.uiState.value)
+        coVerify(exactly = 0) { purchaseRepository.createOrGetPending(any()) }
+    }
+
+    @Test
     fun `When processing successful payment then should update status and success state`() {
         val idempotencyKey = "key-123"
         val transactionId = "TX-999"
@@ -175,10 +196,6 @@ class EventsViewModelTest {
     fun `When onPaymentResultReceived is called then should parse and process`() {
         val uri = android.net.Uri.parse("cielotickets://payment-response?response=base64&responsecode=0")
         val idempotencyKey = "key-123"
-        savedStateHandle[EventsViewModel.MAX_QUANTITY_PER_ORDER.toString()] = idempotencyKey // This is wrong, I need to use the actual key string
-
-        // Use reflection or just set the key if I can.
-        // In this test, KEY_IDEMPOTENCY is private. I'll use the string literal "current_idempotency_key".
         savedStateHandle["current_idempotency_key"] = idempotencyKey
 
         val result = PaymentResult.Success("TX-123", idempotencyKey)

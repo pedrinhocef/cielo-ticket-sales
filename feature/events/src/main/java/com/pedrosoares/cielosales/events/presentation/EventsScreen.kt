@@ -3,19 +3,27 @@ package com.pedrosoares.cielosales.events.presentation
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.RoundedCornerShape
+import coil3.compose.AsyncImage
 import com.pedrosoares.cielosales.core.domain.model.Event
-import com.pedrosoares.cielosales.core.util.UiText
 import com.pedrosoares.cielosales.events.R
 import com.pedrosoares.cielosales.events.util.QrCodeGenerator
 import java.util.Locale
@@ -82,15 +90,10 @@ fun EventsScreen(
                 }
 
                 is UiState.EventList -> {
-                    LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                        items(state.events) { event ->
-                            EventItem(
-                                event = event,
-                                maxQuantity = EventsViewModel.MAX_QUANTITY_PER_ORDER,
-                                onSelect = { qty -> viewModel.startPaymentFlow(event, qty) }
-                            )
-                        }
-                    }
+                    EventList(
+                        events = state.events,
+                        onSelect = { event, quantity -> viewModel.startPaymentFlow(event, quantity) }
+                    )
                 }
 
                 is UiState.PaymentSuccess -> {
@@ -151,12 +154,28 @@ fun EventsScreen(
 }
 
 @Composable
+private fun EventList(
+    events: List<Event>,
+    onSelect: (Event, Int) -> Unit
+) {
+    LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        items(items = events, key = { it.id }) { event ->
+            EventItem(
+                event = event,
+                maxQuantity = EventsViewModel.MAX_QUANTITY_PER_ORDER,
+                onSelect = { quantity -> onSelect(event, quantity) }
+            )
+        }
+    }
+}
+
+@Composable
 fun EventItem(
     event: Event,
     maxQuantity: Int,
     onSelect: (quantity: Int) -> Unit
 ) {
-    var quantity by remember { mutableIntStateOf(1) }
+    var quantity by rememberSaveable(event.id) { mutableIntStateOf(1) }
 
     Card(
         modifier = Modifier
@@ -165,6 +184,26 @@ fun EventItem(
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
+            if (LocalInspectionMode.current) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.secondaryContainer)
+                )
+            } else {
+                AsyncImage(
+                    model = event.imageUrl,
+                    contentDescription = stringResource(R.string.event_image_description, event.title),
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
             Text(text = event.title, style = MaterialTheme.typography.titleLarge)
             Text(text = event.location, style = MaterialTheme.typography.bodyMedium)
 
@@ -201,11 +240,42 @@ fun EventItem(
 
                 val formattedPrice = java.text.NumberFormat.getCurrencyInstance(Locale.forLanguageTag("pt-BR"))
                     .format(totalInReais)
+                val purchaseLabel = pluralStringResource(
+                    R.plurals.buy_tickets,
+                    quantity,
+                    quantity,
+                    formattedPrice
+                )
 
                 Button(onClick = { onSelect(quantity) }) {
-                    Text(stringResource(R.string.pay_amount, formattedPrice))
+                    Text(purchaseLabel)
                 }
             }
         }
+    }
+}
+
+private val previewEvents = listOf(
+    Event("preview-1", "Silva Live Show", "Saquarema Arena", 12000L, "https://picsum.photos/seed/silva/800/450"),
+    Event("preview-2", "Winter Festival", "Convention Center", 25000L, "https://picsum.photos/seed/winter/800/450")
+)
+
+@Preview(showBackground = true, widthDp = 360)
+@Composable
+private fun EventListPreview() {
+    MaterialTheme {
+        EventList(events = previewEvents, onSelect = { _, _ -> })
+    }
+}
+
+@Preview(showBackground = true, widthDp = 360)
+@Composable
+private fun EventItemPreview() {
+    MaterialTheme {
+        EventItem(
+            event = previewEvents.first(),
+            maxQuantity = EventsViewModel.MAX_QUANTITY_PER_ORDER,
+            onSelect = {}
+        )
     }
 }

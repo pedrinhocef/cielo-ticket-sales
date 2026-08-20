@@ -34,17 +34,14 @@ ksp {
 dependencies {
     implementation(libs.androidx.core.ktx)
 
-    // Room
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
     testImplementation(libs.room.testing)
 
-    // Hilt
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
 
-    // QR Code
     implementation(libs.zxing.android)
 
     testImplementation(libs.junit)

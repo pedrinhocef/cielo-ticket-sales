@@ -83,12 +83,17 @@ class EventsViewModel @Inject constructor(
         }
     }
 
-    /** The UI deliberately does not provide a key: it belongs to this durable flow. */
     fun startPaymentFlow(event: Event, quantity: Int) {
         viewModelScope.launch {
             paymentMutex.withLock {
                 if (_uiState.value is UiState.ProcessingPayment || _uiState.value is UiState.PaymentPending) return@withLock
                 try {
+                    val pendingPurchase = savedStateHandle.get<String>(KEY_IDEMPOTENCY)
+                        ?.let { purchaseRepository.getPurchase(it) }
+                    if (pendingPurchase?.paymentStatus == PurchaseStatus.PENDING) {
+                        _uiState.value = UiState.PaymentPending(pendingPurchase)
+                        return@withLock
+                    }
                     val validQuantity = quantity.coerceIn(1, MAX_QUANTITY_PER_ORDER)
                     val purchase = PurchaseEntity(
                         idempotencyKey = UUID.randomUUID().toString(),

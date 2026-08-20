@@ -37,6 +37,8 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.zxing.core)
+    implementation(libs.coil.compose)
+    implementation(libs.coil.network.okhttp)
 
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
@@ -45,4 +47,5 @@ dependencies {
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test.v180)
     testImplementation(libs.robolectric)
+    debugImplementation(libs.androidx.compose.ui.tooling)
 }

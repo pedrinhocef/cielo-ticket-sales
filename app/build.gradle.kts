@@ -54,15 +54,12 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
-    // Hilt
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
 
-    // Room
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
 
-    // QR Code
     implementation(libs.zxing.android)
 }
