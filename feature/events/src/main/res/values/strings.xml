@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="events_title">Cielo Lio Tickets</string>
+    <string name="loading_payment">Waiting for payment processing…</string>
+    <string name="payment_app_not_found">Cielo Lio payment app not found on this device.</string>
+    <string name="payment_approved">Payment Approved!</string>
+    <string name="event_label">Event: %1$s</string>
+    <string name="quantity_label">Qty: %1$d</string>
+    <string name="qr_code_description">Ticket QR Code</string>
+    <string name="new_purchase">New Purchase</string>
+    <string name="payment_attention">Payment Attention</string>
+    <string name="back_to_list">Back to List</string>
+    <string name="pay_amount">Pay %1$s</string>
+    <string name="error_database">Error saving the transaction to the database.</string>
+    <string name="payment_canceled">Payment canceled by user.</string>
+    <string name="pending_payment_msg">You have a pending payment for: %1$s</string>
+    <string name="retry_payment">Retry Payment</string>
+    <string name="error_retry_payment">Could not retry the payment.</string>
+</resources>

@@ -8,9 +8,9 @@ import javax.inject.Inject
 class EventRepository @Inject constructor() {
     fun getEvents(): Flow<List<Event>> = flow {
         val mockEvents = listOf(
-            Event("1", "Show do Silva", "Arena Saquarema", 12000L, "https://picsum.photos/300/200"),
-            Event("2", "Festival de Inverno", "Centro de Convenções", 25000L, "https://picsum.photos/300/201"),
-            Event("3", "Teatro Infantil", "Teatro Municipal", 4500L, "https://picsum.photos/300/202")
+            Event("1", "Silva Live Show", "Saquarema Arena", 12000L, "https://picsum.photos/300/200"),
+            Event("2", "Winter Festival", "Convention Center", 25000L, "https://picsum.photos/300/201"),
+            Event("3", "Children's Theater", "Municipal Theater", 4500L, "https://picsum.photos/300/202")
         )
         emit(mockEvents)
     }
