@@ -26,7 +26,6 @@ class CieloCallbackParser @Inject constructor() {
                 returnedReference
             }
 
-            // Validação estrita de correlação
             if (reference != expectedReference) {
                 return PaymentResult.FailedTechnical(
                     "Correlation failure: expected $expectedReference but got $reference",
@@ -73,9 +72,6 @@ class CieloCallbackParser @Inject constructor() {
                     ?.optJSONObject("paymentFields")
                     ?.optString("paymentTransactionId")
                     .orEmpty()
-            }
-            .ifBlank {
-                approvedPayment?.optString("externalId").orEmpty()
             }
         return if (transactionId.isBlank()) {
             PaymentResult.FailedTechnical("Approved response without transaction ID", reference)

@@ -2,7 +2,6 @@ package com.pedrosoares.cielosales.cielo.data.remote
 
 import android.net.Uri
 
-/** Constants shared by the payment launcher and the callback receiver. */
 object CieloDeepLinkContract {
     const val PAYMENT_SCHEME = "lio"
     const val PAYMENT_HOST = "payment"

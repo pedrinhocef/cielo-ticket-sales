@@ -1,6 +1,7 @@
 package com.pedrosoares.cielosales.events.presentation
 
 import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -40,12 +41,7 @@ fun EventsScreen(
         viewModel.effect.collect { effect ->
             when (effect) {
                 is EventsEffect.LaunchCieloPayment -> {
-                    try {
-                        val intent = Intent(Intent.ACTION_VIEW, effect.uri).apply {
-                            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                        }
-                        context.startActivity(intent)
-                    } catch (_: ActivityNotFoundException) {
+                    launchCieloPayment(context, effect) {
                         viewModel.onCieloLaunchFailed(effect.idempotencyKey)
                     }
                 }
@@ -152,6 +148,21 @@ fun EventsScreen(
                 }
             }
         }
+    }
+}
+
+internal fun launchCieloPayment(
+    context: Context,
+    effect: EventsEffect.LaunchCieloPayment,
+    onLaunchFailed: () -> Unit
+) {
+    try {
+        val intent = Intent(Intent.ACTION_VIEW, effect.uri).apply {
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        }
+        context.startActivity(intent)
+    } catch (_: ActivityNotFoundException) {
+        onLaunchFailed()
     }
 }
 

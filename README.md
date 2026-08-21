@@ -35,6 +35,8 @@ O app usa MVVM, estado de UI unidirecional, Hilt e Room. Um `Mutex`, uma chave d
 
 O app cria um payload de pagamento em Base64 e dispara o Deep Link App-to-App configurado da Cielo Smart. O callback é recebido pela `CieloResponseActivity`, encaminhado à ViewModel, correlacionado à referência da compra pendente e persistido como aprovado, negado, cancelado ou falha técnica.
 
+Para Android 11 ou superior, o Manifest declara a visibilidade do pacote `com.ads.lio.uriappclient`, conforme exigido pela integração UriApp.
+
 Controles importantes:
 
 - `reference` é a chave local de idempotência.
@@ -58,13 +60,13 @@ Referências oficiais: [pagamento](https://docs.cielo.com.br/cielo-smart/docs/pa
 
 ## Testes
 
-`./gradlew test` executa atualmente 26 testes locais:
+`./gradlew test` executa atualmente 31 testes locais:
 
 - `:core`: 4
-- `:feature:cielo`: 11
-- `:feature:events`: 11
+- `:feature:cielo`: 15
+- `:feature:events`: 12
 
-Eles cobrem payload e parser de callback, credenciais ausentes, idempotência no Room, proteção contra duplo clique, callbacks tardios, nova tentativa com a mesma referência, falha de abertura e reidratação de compra pendente. `./gradlew connectedDebugAndroidTest` valida no Android que o deep link de callback resolve para a Activity correta; a suíte foi aprovada em um AVD Android 10/API 29.
+Eles cobrem payload e parser de callback, aprovação sem identificador de transação, erro sem `reference`, JSON inválido, credenciais ausentes, idempotência no Room, proteção contra duplo clique, callbacks tardios, nova tentativa com a mesma referência, falha real ao abrir o Deep Link e reidratação de compra pendente. `./gradlew connectedDebugAndroidTest` valida no Android que o deep link de callback resolve para a Activity correta; a suíte foi aprovada em um AVD Android 10/API 29.
 
 ### Validação manual no emulador oficial
 

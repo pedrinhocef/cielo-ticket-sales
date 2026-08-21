@@ -151,4 +151,77 @@ class CieloCallbackParserTest {
         assertTrue(result is PaymentResult.FailedTechnical)
         assertEquals("key-err", (result as PaymentResult.FailedTechnical).idempotencyKey)
     }
+
+    @Test
+    fun `When internal code is approved without transaction ID then should return technical failure`() {
+        val reference = "key-without-transaction"
+        val json = JSONObject().apply {
+            put("reference", reference)
+            put("code", 0)
+        }
+        val response = Base64.encodeToString(json.toString().toByteArray(), Base64.NO_WRAP)
+
+        val result = parser.parse(
+            Uri.parse("cielotickets://payment-response?response=$response&responsecode=0"),
+            reference
+        )
+
+        assertTrue(result is PaymentResult.FailedTechnical)
+        assertEquals("Approved response without transaction ID", (result as PaymentResult.FailedTechnical).message)
+    }
+
+    @Test
+    fun `When approved payment has only externalId then should return technical failure`() {
+        val reference = "key-external-id"
+        val payment = JSONObject().apply {
+            put("statusCode", 1)
+            put("externalId", "external-123")
+        }
+        val json = JSONObject().apply {
+            put("reference", reference)
+            put("payments", org.json.JSONArray().put(payment))
+        }
+        val response = Base64.encodeToString(json.toString().toByteArray(), Base64.NO_WRAP)
+
+        val result = parser.parse(
+            Uri.parse("cielotickets://payment-response?response=$response&responsecode=0"),
+            reference
+        )
+
+        assertTrue(result is PaymentResult.FailedTechnical)
+        assertEquals("Approved response without transaction ID", (result as PaymentResult.FailedTechnical).message)
+    }
+
+    @Test
+    fun `When official error omits reference then should correlate with active pending purchase`() {
+        val reference = "active-pending-key"
+        val json = JSONObject().apply {
+            put("code", 2)
+            put("reason", "terminal unavailable")
+        }
+        val response = Base64.encodeToString(json.toString().toByteArray(), Base64.NO_WRAP)
+
+        val result = parser.parse(
+            Uri.parse("cielotickets://payment-response?response=$response&responsecode=2"),
+            reference
+        )
+
+        assertTrue(result is PaymentResult.FailedTechnical)
+        assertEquals(reference, (result as PaymentResult.FailedTechnical).idempotencyKey)
+    }
+
+    @Test
+    fun `When Base64 contains malformed JSON then should return technical failure`() {
+        val reference = "key-malformed-json"
+        val response = Base64.encodeToString("{not-json".toByteArray(), Base64.NO_WRAP)
+
+        val result = parser.parse(
+            Uri.parse("cielotickets://payment-response?response=$response&responsecode=0"),
+            reference
+        )
+
+        assertTrue(result is PaymentResult.FailedTechnical)
+        assertEquals("Invalid payment response", (result as PaymentResult.FailedTechnical).message)
+        assertEquals(reference, result.idempotencyKey)
+    }
 }
