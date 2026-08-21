@@ -25,14 +25,12 @@ interface PurchaseDao {
         return CreateOrGetPurchase(purchase = stored, created = inserted != -1L)
     }
 
-    @Query("UPDATE purchases SET paymentStatus = :status, cieloTransactionId = :transactionId, reason = :reason WHERE idempotencyKey = :key")
-    suspend fun updateStatus(key: String, status: PurchaseStatus, transactionId: String?, reason: String?)
-
-    @Query("UPDATE purchases SET paymentStatus = :status, reason = :reason WHERE idempotencyKey = :key AND paymentStatus = :currentStatus")
+    @Query("UPDATE purchases SET paymentStatus = :status, cieloTransactionId = :transactionId, reason = :reason WHERE idempotencyKey = :key AND paymentStatus = :currentStatus")
     suspend fun updateStatusIfCurrent(
         key: String,
         currentStatus: PurchaseStatus,
         status: PurchaseStatus,
+        transactionId: String? = null,
         reason: String?
     ): Int
 

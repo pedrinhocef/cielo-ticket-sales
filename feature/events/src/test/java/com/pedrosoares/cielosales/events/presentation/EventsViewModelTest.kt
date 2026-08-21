@@ -103,6 +103,21 @@ class EventsViewModelTest {
     }
 
     @Test
+    fun `When payment is started twice then should create and launch only once`() {
+        val uri = android.net.Uri.parse("lio://payment?request=123")
+        val purchase = PurchaseEntity("key-once", "evt-1", "Test Show", 1, 10000, PurchaseStatus.PENDING, null)
+        every { payloadBuilder.buildPaymentUri(any(), any(), any(), any(), any()) } returns uri
+        coEvery { purchaseRepository.createOrGetPending(any()) } returns PendingPurchaseResult.Created(purchase)
+
+        viewModel.startPaymentFlow(sampleEvent, 1)
+        viewModel.startPaymentFlow(sampleEvent, 1)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        coVerify(exactly = 1) { purchaseRepository.createOrGetPending(any()) }
+        assertEquals(UiState.ProcessingPayment(purchase.idempotencyKey), viewModel.uiState.value)
+    }
+
+    @Test
     fun `When a persisted payment is pending then should show it instead of creating a new purchase`() {
         val pendingPurchase = PurchaseEntity(
             idempotencyKey = "pending-key",
@@ -120,6 +135,58 @@ class EventsViewModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
 
         assertEquals(UiState.PaymentPending(pendingPurchase), viewModel.uiState.value)
+        coVerify(exactly = 0) { purchaseRepository.createOrGetPending(any()) }
+    }
+
+    @Test
+    fun `When ViewModel is recreated with pending key then should restore pending purchase`() {
+        val pendingPurchase = PurchaseEntity(
+            idempotencyKey = "restored-key",
+            eventId = sampleEvent.id,
+            eventName = sampleEvent.title,
+            quantity = 2,
+            totalAmountInCents = 20000,
+            paymentStatus = PurchaseStatus.PENDING,
+            cieloTransactionId = null
+        )
+        val restoredState = SavedStateHandle(mapOf("current_idempotency_key" to pendingPurchase.idempotencyKey))
+        coEvery { purchaseRepository.getPurchase(pendingPurchase.idempotencyKey) } returns pendingPurchase
+
+        val restoredViewModel = EventsViewModel(
+            eventRepository,
+            purchaseRepository,
+            payloadBuilder,
+            callbackParser,
+            restoredState
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(UiState.PaymentPending(pendingPurchase), restoredViewModel.uiState.value)
+    }
+
+    @Test
+    fun `When retrying technical failure then should reuse the same idempotency key`() {
+        val failedPurchase = PurchaseEntity(
+            idempotencyKey = "retry-key",
+            eventId = sampleEvent.id,
+            eventName = sampleEvent.title,
+            quantity = 1,
+            totalAmountInCents = sampleEvent.priceInCents,
+            paymentStatus = PurchaseStatus.FAILED_TECHNICAL,
+            cieloTransactionId = null
+        )
+        val pendingPurchase = failedPurchase.copy(paymentStatus = PurchaseStatus.PENDING)
+        val uri = android.net.Uri.parse("lio://payment?request=retry")
+        coEvery { purchaseRepository.getPurchase(failedPurchase.idempotencyKey) } returnsMany
+            listOf(failedPurchase, pendingPurchase)
+        coEvery { purchaseRepository.resetTechnicalFailureForRetry(failedPurchase.idempotencyKey) } returns true
+        every { payloadBuilder.buildPaymentUri(any(), failedPurchase.idempotencyKey, any(), any(), any()) } returns uri
+
+        viewModel.retryPayment(failedPurchase)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(failedPurchase.idempotencyKey, savedStateHandle.get<String>("current_idempotency_key"))
+        assertEquals(UiState.ProcessingPayment(failedPurchase.idempotencyKey), viewModel.uiState.value)
         coVerify(exactly = 0) { purchaseRepository.createOrGetPending(any()) }
     }
 
@@ -144,7 +211,7 @@ class EventsViewModelTest {
         viewModel.processPaymentResult(result)
         testDispatcher.scheduler.advanceUntilIdle()
 
-        coVerify { purchaseRepository.updateStatus(idempotencyKey, PurchaseStatus.APPROVED, transactionId, null) }
+        coVerify { purchaseRepository.completePending(idempotencyKey, PurchaseStatus.APPROVED, transactionId, null) }
 
         val state = viewModel.uiState.value
         assertTrue(state is UiState.PaymentSuccess)
@@ -171,7 +238,7 @@ class EventsViewModelTest {
         viewModel.processPaymentResult(result)
         testDispatcher.scheduler.advanceUntilIdle()
 
-        coVerify { purchaseRepository.updateStatus(idempotencyKey, PurchaseStatus.CANCELED, null, null) }
+        coVerify { purchaseRepository.completePending(idempotencyKey, PurchaseStatus.CANCELED, null, null) }
 
         val state = viewModel.uiState.value
         assertTrue(state is UiState.PaymentError)
@@ -204,6 +271,29 @@ class EventsViewModelTest {
         viewModel.onPaymentResultReceived(uri)
         testDispatcher.scheduler.advanceUntilIdle()
 
-        coVerify { purchaseRepository.updateStatus(idempotencyKey, PurchaseStatus.APPROVED, "TX-123", any()) }
+        coVerify { purchaseRepository.completePending(idempotencyKey, PurchaseStatus.APPROVED, "TX-123", any()) }
+    }
+
+    @Test
+    fun `When late cancellation arrives after approval then approved state should be preserved`() {
+        val idempotencyKey = "key-approved"
+        val approvedPurchase = PurchaseEntity(
+            idempotencyKey = idempotencyKey,
+            eventId = sampleEvent.id,
+            eventName = sampleEvent.title,
+            quantity = 1,
+            totalAmountInCents = sampleEvent.priceInCents,
+            paymentStatus = PurchaseStatus.APPROVED,
+            cieloTransactionId = "TX-123"
+        )
+        coEvery {
+            purchaseRepository.completePending(idempotencyKey, PurchaseStatus.CANCELED, null, null)
+        } returns false
+        coEvery { purchaseRepository.getPurchase(idempotencyKey) } returns approvedPurchase
+
+        viewModel.processPaymentResult(PaymentResult.Canceled(idempotencyKey))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(UiState.PaymentSuccess(approvedPurchase), viewModel.uiState.value)
     }
 }

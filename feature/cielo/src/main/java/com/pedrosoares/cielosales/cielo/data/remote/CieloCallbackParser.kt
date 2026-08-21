@@ -37,41 +37,65 @@ class CieloCallbackParser @Inject constructor() {
             if (json.has("code")) {
                 return when (internalCode) {
                     0 -> successfulPaymentOrFailure(json, reference)
-                1 -> PaymentResult.Canceled(reference)
-                2 -> PaymentResult.FailedTechnical("Technical error on the terminal", reference)
-                3 -> PaymentResult.Denied("Payment error", reference)
-                4 -> PaymentResult.FailedTechnical("Authentication or credentials error", reference)
-                else -> PaymentResult.FailedTechnical(
+                    1 -> PaymentResult.Canceled(reference)
+                    2 -> PaymentResult.FailedTechnical("Technical error on the terminal", reference)
+                    3 -> PaymentResult.Denied("Payment error", reference)
+                    4 -> PaymentResult.FailedTechnical("Authentication or credentials error", reference)
+                    else -> PaymentResult.FailedTechnical(
                         "Invalid error code: ${json.optString("reason", "unknown")}",
                         reference
                     )
                 }
             }
 
-            val payment = json.optJSONArray("payments")?.optJSONObject(0)
-            val statusCode = json.optInt("statusCode", payment?.optInt("statusCode", -1) ?: -1)
-            if (statusCode in setOf(0, 1)) {
-                successfulPaymentOrFailure(json, reference)
+            val approvedPayment = findApprovedPayment(json)
+            if (approvedPayment != null) {
+                successfulPaymentOrFailure(json, reference, approvedPayment)
             } else {
                 PaymentResult.FailedTechnical("Payment response has no valid approved transaction", reference)
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             PaymentResult.FailedTechnical("Invalid payment response", expectedReference)
         }
     }
 
-    private fun successfulPaymentOrFailure(json: JSONObject, reference: String): PaymentResult {
+    private fun successfulPaymentOrFailure(
+        json: JSONObject,
+        reference: String,
+        approvedPayment: JSONObject? = findApprovedPayment(json)
+    ): PaymentResult {
         val transactionId = json.optString("paymentTransactionId")
             .ifBlank {
-                json.optJSONArray("payments")
-                    ?.optJSONObject(0)
+                approvedPayment?.optString("paymentTransactionId").orEmpty()
+            }
+            .ifBlank {
+                approvedPayment
+                    ?.optJSONObject("paymentFields")
                     ?.optString("paymentTransactionId")
                     .orEmpty()
+            }
+            .ifBlank {
+                approvedPayment?.optString("externalId").orEmpty()
             }
         return if (transactionId.isBlank()) {
             PaymentResult.FailedTechnical("Approved response without transaction ID", reference)
         } else {
             PaymentResult.Success(transactionId = transactionId, idempotencyKey = reference)
         }
+    }
+
+    private fun findApprovedPayment(json: JSONObject): JSONObject? {
+        val payments = json.optJSONArray("payments") ?: return null
+        val rootStatusCode = json.optInt("statusCode", -1)
+        for (index in 0 until payments.length()) {
+            val payment = payments.optJSONObject(index) ?: continue
+            val paymentFields = payment.optJSONObject("paymentFields")
+            val statusCode = payment.optInt(
+                "statusCode",
+                paymentFields?.optString("statusCode")?.toIntOrNull() ?: rootStatusCode
+            )
+            if (statusCode == 0 || statusCode == 1) return payment
+        }
+        return null
     }
 }

@@ -6,21 +6,16 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
-import com.pedrosoares.cielosales.cielo.data.remote.CieloCallbackParser
 import com.pedrosoares.cielosales.cielo.data.remote.CieloDeepLinkContract
 import com.pedrosoares.cielosales.events.presentation.EventsScreen
 import com.pedrosoares.cielosales.events.presentation.EventsViewModel
+import com.pedrosoares.cielosales.ui.theme.CieloTicketSalesTheme
 import dagger.hilt.android.AndroidEntryPoint
-import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-
-    @Inject
-    lateinit var callbackParser: CieloCallbackParser
 
     private val eventsViewModel: EventsViewModel by viewModels()
 
@@ -28,10 +23,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         handleIntent(intent)
         setContent {
-            MaterialTheme {
+            CieloTicketSalesTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
                 ) {
                     EventsScreen(viewModel = eventsViewModel)
                 }

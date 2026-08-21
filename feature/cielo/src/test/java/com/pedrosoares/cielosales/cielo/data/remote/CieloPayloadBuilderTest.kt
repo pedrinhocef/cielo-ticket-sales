@@ -6,6 +6,7 @@ import io.mockk.every
 import io.mockk.mockk
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -64,5 +65,23 @@ class CieloPayloadBuilderTest {
         assertEquals("event-42", item.getString("sku"))
         assertEquals(500, item.getInt("unitPrice"))
         assertEquals(qty, item.getInt("quantity"))
+    }
+
+    @Test
+    fun `When Client ID is missing then should fail before launching payment`() {
+        every { config.clientId } returns ""
+
+        assertThrows(IllegalArgumentException::class.java) {
+            builder.buildPaymentUri(1000, "key", "event", "Event", 1)
+        }
+    }
+
+    @Test
+    fun `When access token is missing then should fail before launching payment`() {
+        every { config.accessToken } returns ""
+
+        assertThrows(IllegalArgumentException::class.java) {
+            builder.buildPaymentUri(1000, "key", "event", "Event", 1)
+        }
     }
 }

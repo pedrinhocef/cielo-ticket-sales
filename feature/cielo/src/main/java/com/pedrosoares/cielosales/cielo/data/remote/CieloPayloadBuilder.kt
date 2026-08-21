@@ -17,6 +17,8 @@ class CieloPayloadBuilder @Inject constructor(
         eventName: String,
         quantity: Int
     ): Uri {
+        require(config.clientId.isNotBlank()) { "Cielo Client ID is not configured" }
+        require(config.accessToken.isNotBlank()) { "Cielo Access Token is not configured" }
         require(quantity in 1..10) { "Quantity must be between 1 and 10" }
         require(unitPriceInCents > 0) { "Unit price must be positive" }
         val totalInCents = Math.multiplyExact(unitPriceInCents, quantity.toLong())

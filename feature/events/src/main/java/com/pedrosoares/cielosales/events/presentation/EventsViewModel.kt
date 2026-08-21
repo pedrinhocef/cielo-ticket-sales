@@ -112,7 +112,7 @@ class EventsViewModel @Inject constructor(
                 } catch (exception: Exception) {
                     if (exception is CancellationException) throw exception
                     _uiState.value = UiState.PaymentError(
-                        UiText.StringResource(R.string.error_database)
+                        UiText.StringResource(R.string.error_start_payment)
                     )
                 }
             }
@@ -180,16 +180,20 @@ class EventsViewModel @Inject constructor(
     fun onCieloLaunchFailed(idempotencyKey: String) {
         viewModelScope.launch {
             paymentMutex.withLock {
-                purchaseRepository.updateStatus(
+                purchaseRepository.completePending(
                     key = idempotencyKey,
                     status = PurchaseStatus.FAILED_TECHNICAL,
                     reason = "Cielo payment application was not found"
                 )
                 purchaseRepository.getPurchase(idempotencyKey)?.let { purchase ->
                     savedStateHandle[KEY_IDEMPOTENCY] = idempotencyKey
-                    _uiState.value = UiState.PaymentError(
-                        UiText.StringResource(R.string.payment_app_not_found), purchase
-                    )
+                    if (purchase.paymentStatus == PurchaseStatus.FAILED_TECHNICAL) {
+                        _uiState.value = UiState.PaymentError(
+                            UiText.StringResource(R.string.payment_app_not_found), purchase
+                        )
+                    } else {
+                        showPersistedResult(purchase)
+                    }
                 }
             }
         }
@@ -205,7 +209,7 @@ class EventsViewModel @Inject constructor(
                     is PaymentResult.FailedTechnical, is PaymentResult.Error -> PurchaseStatus.FAILED_TECHNICAL
                 }
                 try {
-                    purchaseRepository.updateStatus(
+                    purchaseRepository.completePending(
                         key = result.idempotencyKey,
                         status = status,
                         transactionId = (result as? PaymentResult.Success)?.transactionId,
@@ -214,23 +218,7 @@ class EventsViewModel @Inject constructor(
                             ?: (result as? PaymentResult.Error)?.message
                     )
                     purchaseRepository.getPurchase(result.idempotencyKey)?.let { purchase ->
-                        if (status == PurchaseStatus.APPROVED) {
-                            _uiState.value = UiState.PaymentSuccess(purchase)
-                            savedStateHandle.remove<String>(KEY_IDEMPOTENCY)
-                        } else {
-                            val message = when (result) {
-                                is PaymentResult.Canceled -> UiText.StringResource(R.string.payment_canceled)
-                                is PaymentResult.Denied -> UiText.DynamicString(result.reason)
-                                is PaymentResult.FailedTechnical -> UiText.DynamicString(result.message)
-                                is PaymentResult.Error -> UiText.DynamicString(result.message)
-                                else -> UiText.StringResource(R.string.payment_attention)
-                            }
-                            _uiState.value = UiState.PaymentError(
-                                message,
-                                retryPurchase = purchase.takeIf { status == PurchaseStatus.FAILED_TECHNICAL }
-                            )
-                            if (status != PurchaseStatus.FAILED_TECHNICAL) savedStateHandle.remove<String>(KEY_IDEMPOTENCY)
-                        }
+                        showPersistedResult(purchase, result)
                     }
                 } catch (exception: Exception) {
                     if (exception is CancellationException) throw exception
@@ -243,13 +231,36 @@ class EventsViewModel @Inject constructor(
     }
 
     private fun showTerminalPurchase(purchase: PurchaseEntity) {
-        _uiState.value = if (purchase.paymentStatus == PurchaseStatus.APPROVED) {
-            UiState.PaymentSuccess(purchase)
-        } else {
-            UiState.PaymentError(
-                UiText.StringResource(R.string.payment_attention),
-                purchase.takeIf { it.paymentStatus == PurchaseStatus.FAILED_TECHNICAL }
-            )
+        showPersistedResult(purchase)
+    }
+
+    private fun showPersistedResult(purchase: PurchaseEntity, callback: PaymentResult? = null) {
+        when (purchase.paymentStatus) {
+            PurchaseStatus.APPROVED -> {
+                _uiState.value = UiState.PaymentSuccess(purchase)
+                savedStateHandle.remove<String>(KEY_IDEMPOTENCY)
+            }
+            PurchaseStatus.FAILED_TECHNICAL -> {
+                val message = when (callback) {
+                    is PaymentResult.FailedTechnical -> UiText.DynamicString(callback.message)
+                    is PaymentResult.Error -> UiText.DynamicString(callback.message)
+                    else -> purchase.reason?.let(UiText::DynamicString)
+                        ?: UiText.StringResource(R.string.payment_attention)
+                }
+                _uiState.value = UiState.PaymentError(message, retryPurchase = purchase)
+            }
+            PurchaseStatus.CANCELED -> {
+                _uiState.value = UiState.PaymentError(UiText.StringResource(R.string.payment_canceled))
+                savedStateHandle.remove<String>(KEY_IDEMPOTENCY)
+            }
+            PurchaseStatus.DENIED -> {
+                _uiState.value = UiState.PaymentError(
+                    purchase.reason?.let(UiText::DynamicString)
+                        ?: UiText.StringResource(R.string.payment_attention)
+                )
+                savedStateHandle.remove<String>(KEY_IDEMPOTENCY)
+            }
+            PurchaseStatus.PENDING -> _uiState.value = UiState.PaymentPending(purchase)
         }
     }
 }

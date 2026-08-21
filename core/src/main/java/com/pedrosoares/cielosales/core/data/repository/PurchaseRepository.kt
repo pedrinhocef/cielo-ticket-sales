@@ -23,13 +23,20 @@ class PurchaseRepository @Inject constructor(
         }
     }
 
-    suspend fun updateStatus(
+    suspend fun completePending(
         key: String,
         status: PurchaseStatus,
         transactionId: String? = null,
         reason: String? = null
-    ) {
-        purchaseDao.updateStatus(key, status, transactionId, reason)
+    ): Boolean {
+        require(status != PurchaseStatus.PENDING) { "A pending purchase must complete with a terminal status" }
+        return purchaseDao.updateStatusIfCurrent(
+            key = key,
+            currentStatus = PurchaseStatus.PENDING,
+            status = status,
+            transactionId = transactionId,
+            reason = reason
+        ) == 1
     }
 
     suspend fun getPurchase(key: String): PurchaseEntity? {
@@ -41,6 +48,7 @@ class PurchaseRepository @Inject constructor(
             key = key,
             currentStatus = PurchaseStatus.FAILED_TECHNICAL,
             status = PurchaseStatus.PENDING,
+            transactionId = null,
             reason = null
         ) == 1
 }

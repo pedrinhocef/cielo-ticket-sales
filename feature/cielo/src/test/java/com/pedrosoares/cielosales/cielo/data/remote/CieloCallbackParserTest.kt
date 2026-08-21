@@ -43,6 +43,28 @@ class CieloCallbackParserTest {
     }
 
     @Test
+    fun `When official Cielo response nests status and transaction ID then should return Success`() {
+        val reference = "key-official"
+        val txId = "48fa63c9-95ee-483e-9e7b-ce32633f129b"
+        val paymentFields = JSONObject().apply {
+            put("statusCode", "1")
+            put("paymentTransactionId", txId)
+        }
+        val json = JSONObject().apply {
+            put("reference", reference)
+            put("payments", org.json.JSONArray().put(JSONObject().put("paymentFields", paymentFields)))
+        }
+        val base64 = Base64.encodeToString(json.toString().toByteArray(), Base64.DEFAULT)
+        val uri = Uri.parse("cielotickets://payment-response?response=$base64&responsecode=0")
+
+        val result = parser.parse(uri, reference)
+
+        assertTrue(result is PaymentResult.Success)
+        assertEquals(txId, (result as PaymentResult.Success).transactionId)
+        assertEquals(reference, result.idempotencyKey)
+    }
+
+    @Test
     fun `When responsecode is 0 but internal code is 1 then should return Canceled`() {
         val reference = "key-123"
         val json = JSONObject().apply {

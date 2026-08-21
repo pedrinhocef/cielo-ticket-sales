@@ -45,8 +45,6 @@ android {
 }
 
 dependencies {
-    implementation(project(":core"))
-
     implementation(libs.androidx.core.ktx)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
@@ -55,4 +53,5 @@ dependencies {
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test.v180)
     testImplementation(libs.robolectric)
+    androidTestImplementation(libs.androidx.test.runner)
 }

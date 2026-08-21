@@ -29,7 +29,7 @@ Para a validação Cielo, instale o emulador oficial Cielo Smart, instale este A
 - `:feature:cielo`: construtor do payload Cielo, parser de callback e abstração de credenciais.
 - `:feature:events`: interface Compose, ViewModel e orquestração do pagamento.
 
-O app usa MVVM, estado de UI unidirecional, Hilt e Room. Um `Mutex`, uma chave de idempotência persistida e uma operação atômica do Room evitam a criação concorrente ou repetida de pagamentos. Uma compra pendente é recuperada após Process Death, mas nunca é iniciada automaticamente.
+O app usa MVVM, estado de UI unidirecional, Hilt e Room. Um `Mutex`, uma chave de idempotência persistida e operações atômicas do Room evitam a criação concorrente ou repetida de pagamentos. Estados terminais são imutáveis: callbacks repetidos ou fora de ordem não podem rebaixar uma compra já aprovada, negada ou cancelada. Uma compra pendente é recuperada após Process Death, mas nunca é iniciada automaticamente.
 
 ## Integração Cielo Smart
 
@@ -39,8 +39,10 @@ Controles importantes:
 
 - `reference` é a chave local de idempotência.
 - Uma aprovação exige identificador de transação válido e referência correspondente.
+- Apenas compras `PENDING` aceitam um resultado; estados terminais ignoram callbacks tardios.
 - O `code` do JSON de callback define o resultado de negócio; o `responsecode` da URL não é usado como resultado do pagamento.
 - A ausência do aplicativo Cielo é tratada como falha técnica com nova tentativa disponível.
+- Credenciais ausentes interrompem o fluxo antes da abertura do aplicativo de pagamento.
 
 Referências oficiais: [pagamento](https://docs.cielo.com.br/cielo-smart/docs/pagamento), [exemplo de Deep Link](https://docs.cielo.com.br/cielo-smart/docs/deep-link-exemplo-de-codigo), [configuração do Manifest](https://docs.cielo.com.br/cielo-smart/docs/configurando-o-android-manifest) e [códigos de erro](https://docs.cielo.com.br/cielo-smart/docs/codigos-de-erro).
 
@@ -56,20 +58,29 @@ Referências oficiais: [pagamento](https://docs.cielo.com.br/cielo-smart/docs/pa
 
 ## Testes
 
-`./gradlew test` executa atualmente 19 testes locais aprovados:
+`./gradlew test` executa atualmente 26 testes locais:
 
-- `:app`: 1
-- `:core`: 3
-- `:feature:cielo`: 8
-- `:feature:events`: 7
+- `:core`: 4
+- `:feature:cielo`: 11
+- `:feature:events`: 11
 
-Eles cobrem payload e parser de callback, idempotência no Room, proteção contra duplo clique, nova tentativa, falha de abertura e reidratação de compra pendente. Testes instrumentados exigem um dispositivo ou emulador conectado.
+Eles cobrem payload e parser de callback, credenciais ausentes, idempotência no Room, proteção contra duplo clique, callbacks tardios, nova tentativa com a mesma referência, falha de abertura e reidratação de compra pendente. `./gradlew connectedDebugAndroidTest` valida no Android que o deep link de callback resolve para a Activity correta; a suíte foi aprovada em um AVD Android 10/API 29.
+
+### Validação manual no emulador oficial
+
+Validado com Cielo Emulador 1.61.9 em Android 10/API 29:
+
+- Pagamento aprovado, retorno ao app e geração do QR Code.
+- Cancelamento sem emissão de ingresso.
+- Falha técnica com opção de nova tentativa.
+- Nova tentativa preservando evento, quantidade, valor e referência da compra.
+- Pagamento aprovado depois de uma falha técnica.
 
 ## Decisões e próximos passos
 
-O case pede um fluxo de compra simples; por isso, cada pagamento contém ingressos de um evento, em vez de um carrinho com múltiplos eventos. O Room é apenas local; em produção, seria recomendada uma camada de backend para conciliação e auditoria no servidor.
+O case pede um fluxo de compra simples; por isso, cada pagamento contém ingressos de um evento, em vez de um carrinho com múltiplos eventos. O Room é apenas local; em produção, seria recomendada uma camada de backend para conciliação, auditoria e validação do ingresso no servidor. As credenciais exigidas pelo contrato de integração local ficam no APK e, portanto, não devem ser tratadas como um segredo irrecuperável no cliente.
 
-Com mais tempo, as próximas melhorias seriam histórico de compras, validação do QR Code na entrada e testes ponta a ponta no emulador oficial Cielo. A validação final das credenciais e do ambiente Cielo continua sendo parte da homologação.
+Com mais tempo, as próximas melhorias seriam histórico de compras, QR Code assinado e validado no servidor e automação ponta a ponta sobre o emulador oficial Cielo. A validação final das credenciais e do terminal físico continua sendo parte da homologação.
 
 ## Desenvolvimento assistido por IA
 

@@ -15,6 +15,7 @@
         <item quantity="other">Buy %1$d tickets - %2$s</item>
     </plurals>
     <string name="error_database">Error saving the transaction to the database.</string>
+    <string name="error_start_payment">Could not start the payment. Check the Cielo configuration and try again.</string>
     <string name="payment_canceled">Payment canceled by user.</string>
     <string name="pending_payment_msg">You have a pending payment for: %1$s</string>
     <string name="retry_payment">Retry Payment</string>

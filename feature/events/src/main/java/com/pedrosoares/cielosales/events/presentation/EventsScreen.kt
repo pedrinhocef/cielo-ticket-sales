@@ -41,7 +41,9 @@ fun EventsScreen(
             when (effect) {
                 is EventsEffect.LaunchCieloPayment -> {
                     try {
-                        val intent = Intent(Intent.ACTION_VIEW, effect.uri)
+                        val intent = Intent(Intent.ACTION_VIEW, effect.uri).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                        }
                         context.startActivity(intent)
                     } catch (_: ActivityNotFoundException) {
                         viewModel.onCieloLaunchFailed(effect.idempotencyKey)

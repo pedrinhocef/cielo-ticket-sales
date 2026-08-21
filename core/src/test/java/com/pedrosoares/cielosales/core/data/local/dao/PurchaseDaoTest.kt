@@ -89,10 +89,43 @@ class PurchaseDaoTest {
         )
         purchaseDao.insertPurchase(purchase)
 
-        purchaseDao.updateStatus("key-update", PurchaseStatus.APPROVED, "TX-123", null)
+        purchaseDao.updateStatusIfCurrent(
+            key = "key-update",
+            currentStatus = PurchaseStatus.PENDING,
+            status = PurchaseStatus.APPROVED,
+            transactionId = "TX-123",
+            reason = null
+        )
 
         val result = purchaseDao.getPurchaseByIdempotencyKey("key-update")
         assertEquals(PurchaseStatus.APPROVED, result?.paymentStatus)
         assertEquals("TX-123", result?.cieloTransactionId)
+    }
+
+    @Test
+    fun `When purchase is terminal then a late callback should not overwrite it`() = runBlocking {
+        val purchase = PurchaseEntity(
+            idempotencyKey = "key-terminal",
+            eventId = "evt-1",
+            eventName = "Event A",
+            quantity = 1,
+            totalAmountInCents = 1000,
+            paymentStatus = PurchaseStatus.APPROVED,
+            cieloTransactionId = "TX-123"
+        )
+        purchaseDao.insertPurchase(purchase)
+
+        val rowsUpdated = purchaseDao.updateStatusIfCurrent(
+            key = purchase.idempotencyKey,
+            currentStatus = PurchaseStatus.PENDING,
+            status = PurchaseStatus.CANCELED,
+            transactionId = null,
+            reason = "Late callback"
+        )
+
+        val stored = purchaseDao.getPurchaseByIdempotencyKey(purchase.idempotencyKey)
+        assertEquals(0, rowsUpdated)
+        assertEquals(PurchaseStatus.APPROVED, stored?.paymentStatus)
+        assertEquals("TX-123", stored?.cieloTransactionId)
     }
 }
