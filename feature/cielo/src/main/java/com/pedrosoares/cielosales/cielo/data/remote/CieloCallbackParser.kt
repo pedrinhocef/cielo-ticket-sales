@@ -2,16 +2,25 @@ package com.pedrosoares.cielosales.cielo.data.remote
 
 import android.net.Uri
 import android.util.Base64
-import com.pedrosoares.cielosales.cielo.domain.model.PaymentResult
+import com.pedrosoares.cielosales.core.domain.model.PaymentResult
 import org.json.JSONObject
 import javax.inject.Inject
 
 class CieloCallbackParser @Inject constructor() {
+    private companion object {
+        const val CALLBACK_CODE_APPROVED = 0
+        const val CALLBACK_CODE_CANCELED = 1
+        const val CALLBACK_CODE_TECHNICAL_FAILURE = 2
+        const val CALLBACK_CODE_DENIED = 3
+        const val CALLBACK_CODE_AUTHENTICATION_FAILURE = 4
+        const val UNKNOWN_CALLBACK_CODE = -1
+        const val PAYMENT_STATUS_CODE_APPROVED_ALTERNATIVE = 1
+    }
 
     fun parse(uri: Uri, expectedReference: String): PaymentResult {
         val responseBase64 = uri.getQueryParameter("response")
 
-        if (responseBase64.isNullOrBlank() || expectedReference.isBlank()) {
+        if (responseBase64.isNullOrBlank()) {
             return PaymentResult.Error("Missing 'response' parameter", expectedReference)
         }
 
@@ -19,14 +28,20 @@ class CieloCallbackParser @Inject constructor() {
             val jsonStr = String(Base64.decode(responseBase64, Base64.DEFAULT))
             val json = JSONObject(jsonStr)
             val returnedReference = json.optString("reference", "")
-            val internalCode = json.optInt("code", -1)
-            val reference = if (returnedReference.isBlank() && internalCode in 1..4) {
+            val internalCode = json.optInt("code", UNKNOWN_CALLBACK_CODE)
+            val reference = if (returnedReference.isBlank() && expectedReference.isNotBlank() &&
+                internalCode in CALLBACK_CODE_CANCELED..CALLBACK_CODE_AUTHENTICATION_FAILURE
+            ) {
                 expectedReference
             } else {
                 returnedReference
             }
 
-            if (reference != expectedReference) {
+            if (reference.isBlank()) {
+                return PaymentResult.FailedTechnical("Payment response has no reference", expectedReference)
+            }
+
+            if (expectedReference.isNotBlank() && reference != expectedReference) {
                 return PaymentResult.FailedTechnical(
                     "Correlation failure: expected $expectedReference but got $reference",
                     expectedReference
@@ -35,11 +50,11 @@ class CieloCallbackParser @Inject constructor() {
 
             if (json.has("code")) {
                 return when (internalCode) {
-                    0 -> successfulPaymentOrFailure(json, reference)
-                    1 -> PaymentResult.Canceled(reference)
-                    2 -> PaymentResult.FailedTechnical("Technical error on the terminal", reference)
-                    3 -> PaymentResult.Denied("Payment error", reference)
-                    4 -> PaymentResult.FailedTechnical("Authentication or credentials error", reference)
+                    CALLBACK_CODE_APPROVED -> successfulPaymentOrFailure(json, reference)
+                    CALLBACK_CODE_CANCELED -> PaymentResult.Canceled(reference)
+                    CALLBACK_CODE_TECHNICAL_FAILURE -> PaymentResult.FailedTechnical("Technical error on the terminal", reference)
+                    CALLBACK_CODE_DENIED -> PaymentResult.Denied("Payment error", reference)
+                    CALLBACK_CODE_AUTHENTICATION_FAILURE -> PaymentResult.FailedTechnical("Authentication or credentials error", reference)
                     else -> PaymentResult.FailedTechnical(
                         "Invalid error code: ${json.optString("reason", "unknown")}",
                         reference
@@ -82,7 +97,7 @@ class CieloCallbackParser @Inject constructor() {
 
     private fun findApprovedPayment(json: JSONObject): JSONObject? {
         val payments = json.optJSONArray("payments") ?: return null
-        val rootStatusCode = json.optInt("statusCode", -1)
+        val rootStatusCode = json.optInt("statusCode", UNKNOWN_CALLBACK_CODE)
         for (index in 0 until payments.length()) {
             val payment = payments.optJSONObject(index) ?: continue
             val paymentFields = payment.optJSONObject("paymentFields")
@@ -90,7 +105,7 @@ class CieloCallbackParser @Inject constructor() {
                 "statusCode",
                 paymentFields?.optString("statusCode")?.toIntOrNull() ?: rootStatusCode
             )
-            if (statusCode == 0 || statusCode == 1) return payment
+            if (statusCode == CALLBACK_CODE_APPROVED || statusCode == PAYMENT_STATUS_CODE_APPROVED_ALTERNATIVE) return payment
         }
         return null
     }

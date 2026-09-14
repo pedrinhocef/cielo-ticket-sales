@@ -36,6 +36,9 @@ interface PurchaseDao {
 
     @Query("SELECT * FROM purchases ORDER BY timestamp DESC")
     fun getAllPurchases(): Flow<List<PurchaseEntity>>
+
+    @Query("SELECT * FROM purchases WHERE paymentStatus = :status ORDER BY timestamp DESC LIMIT :limit")
+    suspend fun getPurchasesByStatus(status: PurchaseStatus, limit: Int): List<PurchaseEntity>
 }
 
 data class CreateOrGetPurchase(

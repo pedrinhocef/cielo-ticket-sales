@@ -2,7 +2,7 @@ package com.pedrosoares.cielosales.cielo.data.remote
 
 import android.net.Uri
 import android.util.Base64
-import com.pedrosoares.cielosales.cielo.domain.model.PaymentResult
+import com.pedrosoares.cielosales.core.domain.model.PaymentResult
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -40,6 +40,27 @@ class CieloCallbackParserTest {
         assertTrue(result is PaymentResult.Success)
         assertEquals(reference, (result as PaymentResult.Success).idempotencyKey)
         assertEquals(txId, result.transactionId)
+    }
+
+    @Test
+    fun `When callback arrives after process death without saved reference then should use callback reference`() {
+        val reference = "persisted-reference"
+        val transactionId = "transaction-after-restart"
+        val json = JSONObject().apply {
+            put("reference", reference)
+            put("code", 0)
+            put("paymentTransactionId", transactionId)
+        }
+        val response = Base64.encodeToString(json.toString().toByteArray(), Base64.NO_WRAP)
+
+        val result = parser.parse(
+            Uri.parse("cielotickets://payment-response?response=$response&responsecode=0"),
+            expectedReference = ""
+        )
+
+        assertTrue(result is PaymentResult.Success)
+        assertEquals(reference, (result as PaymentResult.Success).idempotencyKey)
+        assertEquals(transactionId, result.transactionId)
     }
 
     @Test

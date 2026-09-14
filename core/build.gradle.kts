@@ -31,6 +31,7 @@ ksp {
 
 dependencies {
     implementation(libs.androidx.core.ktx)
+    implementation(libs.zxing.core)
 
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)

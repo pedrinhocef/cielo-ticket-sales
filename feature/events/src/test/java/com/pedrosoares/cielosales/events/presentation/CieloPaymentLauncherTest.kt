@@ -28,6 +28,7 @@ class CieloPaymentLauncherTest {
         launchCieloPayment(
             context = context,
             effect = effect,
+            onLaunchStarted = {},
             onLaunchFailed = { launchFailed = true }
         )
 

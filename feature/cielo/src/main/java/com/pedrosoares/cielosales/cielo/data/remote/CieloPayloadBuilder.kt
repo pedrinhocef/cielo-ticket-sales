@@ -3,6 +3,7 @@ package com.pedrosoares.cielosales.cielo.data.remote
 import android.net.Uri
 import android.util.Base64
 import com.pedrosoares.cielosales.cielo.data.config.CieloConfig
+import com.pedrosoares.cielosales.core.domain.model.PurchaseConstraints
 import org.json.JSONArray
 import org.json.JSONObject
 import javax.inject.Inject
@@ -10,6 +11,12 @@ import javax.inject.Inject
 class CieloPayloadBuilder @Inject constructor(
     private val config: CieloConfig
 ) {
+    private companion object {
+        const val INSTALLMENTS_SINGLE_PAYMENT = 0
+        const val UNIT_OF_MEASURE_TICKET = "unidade"
+        const val PAYMENT_CODE_DEBIT_AT_SIGHT = "DEBITO_AVISTA"
+    }
+
     fun buildPaymentUri(
         unitPriceInCents: Long,
         idempotencyKey: String,
@@ -19,7 +26,9 @@ class CieloPayloadBuilder @Inject constructor(
     ): Uri {
         require(config.clientId.isNotBlank()) { "Cielo Client ID is not configured" }
         require(config.accessToken.isNotBlank()) { "Cielo Access Token is not configured" }
-        require(quantity in 1..10) { "Quantity must be between 1 and 10" }
+        require(quantity in PurchaseConstraints.MIN_TICKETS_PER_ORDER..PurchaseConstraints.MAX_TICKETS_PER_ORDER) {
+            "Quantity must be between ${PurchaseConstraints.MIN_TICKETS_PER_ORDER} and ${PurchaseConstraints.MAX_TICKETS_PER_ORDER}"
+        }
         require(unitPriceInCents > 0) { "Unit price must be positive" }
         val totalInCents = Math.multiplyExact(unitPriceInCents, quantity.toLong())
         require(unitPriceInCents <= Int.MAX_VALUE) { "Unit price exceeds Cielo payload limit" }
@@ -28,20 +37,20 @@ class CieloPayloadBuilder @Inject constructor(
             put("accessToken", config.accessToken)
             put("clientID", config.clientId)
             put("reference", idempotencyKey)
-            put("installments", 0)
+            put("installments", INSTALLMENTS_SINGLE_PAYMENT)
 
             val items = JSONArray().apply {
                 val item = JSONObject().apply {
                     put("name", eventName)
                     put("quantity", quantity)
                     put("sku", eventId)
-                    put("unitOfMeasure", "unidade")
+                    put("unitOfMeasure", UNIT_OF_MEASURE_TICKET)
                     put("unitPrice", unitPriceInCents.toInt())
                 }
                 put(item)
             }
             put("items", items)
-            put("paymentCode", "DEBITO_AVISTA")
+            put("paymentCode", PAYMENT_CODE_DEBIT_AT_SIGHT)
             put("value", totalInCents.toString())
         }
 

@@ -1,12 +1,13 @@
 package com.pedrosoares.cielosales.core.data.repository
 
 import com.pedrosoares.cielosales.core.domain.model.Event
+import com.pedrosoares.cielosales.core.domain.repository.EventRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import javax.inject.Inject
 
-class EventRepository @Inject constructor() {
-    fun getEvents(): Flow<List<Event>> = flow {
+class FakeEventRepository @Inject constructor() : EventRepository {
+    override fun observeEvents(): Flow<List<Event>> = flow {
         val mockEvents = listOf(
             Event("event-001", "Silva Live Show", "Saquarema Arena", 12000L, "https://picsum.photos/seed/silva/800/450"),
             Event("event-002", "Winter Festival", "Convention Center", 25000L, "https://picsum.photos/seed/winter/800/450"),

@@ -26,7 +26,7 @@ android {
 
 dependencies {
     implementation(project(":core"))
-    implementation(project(":feature:cielo"))
+    testImplementation(project(":feature:cielo"))
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
@@ -36,7 +36,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.zxing.core)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
 

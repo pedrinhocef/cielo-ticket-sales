@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Cielo Ticket Sales</string>
+    <string name="navigation_events">Eventos</string>
+    <string name="navigation_purchases">Ingressos</string>
 </resources>

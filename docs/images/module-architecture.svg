@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img" aria-labelledby="title description">
+  <title id="title">Arquitetura modular do Cielo Ticket Sales</title>
+  <desc id="description">Diagrama da comunicação entre app, features, domínio, dados locais e Cielo Smart.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#456078"/>
+    </marker>
+    <style>
+      .background { fill: #f8fafc; }
+      .title { fill: #102a43; font: 700 28px Arial, sans-serif; }
+      .subtitle { fill: #486581; font: 16px Arial, sans-serif; }
+      .module { stroke-width: 2; rx: 18; }
+      .module-title { fill: #102a43; font: 700 21px Arial, sans-serif; }
+      .module-text { fill: #334e68; font: 15px Arial, sans-serif; }
+      .flow { stroke: #456078; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+      .flow-label { fill: #486581; font: 14px Arial, sans-serif; }
+      .boundary { fill: none; stroke: #9fb3c8; stroke-width: 2; stroke-dasharray: 8 8; rx: 22; }
+    </style>
+  </defs>
+
+  <rect class="background" width="1200" height="720" rx="24"/>
+  <text class="title" x="60" y="64">Cielo Ticket Sales — comunicação entre módulos</text>
+  <text class="subtitle" x="60" y="94">Dependências seguem para dentro; o retorno de pagamento entra pelo callback e é persistido antes da UI reagir.</text>
+
+  <rect class="boundary" x="38" y="126" width="1124" height="518"/>
+  <text class="subtitle" x="60" y="154">Aplicativo Android</text>
+
+  <rect class="module" x="70" y="192" width="210" height="160" fill="#d9eafd" stroke="#4299e1"/>
+  <text class="module-title" x="98" y="232">:app</text>
+  <text class="module-text" x="98" y="266">Navegação</text>
+  <text class="module-text" x="98" y="292">Hilt</text>
+  <text class="module-text" x="98" y="318">Activity de callback</text>
+
+  <rect class="module" x="355" y="172" width="260" height="210" fill="#e3f9e5" stroke="#48bb78"/>
+  <text class="module-title" x="383" y="214">:feature:events</text>
+  <text class="module-text" x="383" y="248">Compose + ViewModel</text>
+  <text class="module-text" x="383" y="274">Casos de uso de compra</text>
+  <text class="module-text" x="383" y="300">Estado e efeitos de UI</text>
+  <text class="module-text" x="383" y="326">Contrato de pagamento</text>
+
+  <rect class="module" x="355" y="438" width="260" height="138" fill="#e3f9e5" stroke="#48bb78"/>
+  <text class="module-title" x="383" y="480">:feature:purchases</text>
+  <text class="module-text" x="383" y="514">Histórico Compose</text>
+  <text class="module-text" x="383" y="540">Filtros por status</text>
+
+  <rect class="module" x="710" y="172" width="220" height="210" fill="#fff3d6" stroke="#ed8936"/>
+  <text class="module-title" x="738" y="214">:feature:cielo</text>
+  <text class="module-text" x="738" y="248">Payload Base64</text>
+  <text class="module-text" x="738" y="274">Parser de callback</text>
+  <text class="module-text" x="738" y="300">Implementação gateway</text>
+
+  <rect class="module" x="710" y="438" width="220" height="138" fill="#eee9ff" stroke="#805ad5"/>
+  <text class="module-title" x="738" y="480">:core</text>
+  <text class="module-text" x="738" y="514">Domínio + PaymentGateway</text>
+  <text class="module-text" x="738" y="540">Room e repositórios</text>
+
+  <rect class="module" x="980" y="258" width="142" height="140" fill="#ffe3e3" stroke="#e53e3e"/>
+  <text class="module-title" x="1008" y="300">Cielo</text>
+  <text class="module-title" x="1008" y="328">Smart</text>
+  <text class="module-text" x="1008" y="360">App externo</text>
+
+  <path class="flow" d="M280 270 H355"/>
+  <text class="flow-label" x="292" y="250">compõe</text>
+  <path class="flow" d="M615 340 L710 470"/>
+  <text class="flow-label" x="624" y="404">contrato</text>
+  <path class="flow" d="M615 500 H710"/>
+  <text class="flow-label" x="630" y="480">consulta</text>
+  <path class="flow" d="M820 382 V438"/>
+  <text class="flow-label" x="836" y="418">implementa gateway</text>
+  <path class="flow" d="M930 278 H980"/>
+  <text class="flow-label" x="932" y="258">Deep Link</text>
+  <path class="flow" d="M1050 398 V604 H175 V352"/>
+  <text class="flow-label" x="716" y="626">callback → Activity → ViewModel</text>
+</svg>

@@ -1,4 +1,4 @@
-package com.pedrosoares.cielosales
+package com.pedrosoares.cielosales.app.presentation
 
 import android.content.Intent
 import android.net.Uri
@@ -11,7 +11,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class CieloCallbackIntentTest {
     @Test
-    fun callbackDeepLinkResolvesToResponseActivity() {
+    fun whenCallbackDeepLinkIsReceived_thenResolvesToResponseActivity() {
         val appContext = InstrumentationRegistry.getInstrumentation().targetContext
         val intent = Intent(
             Intent.ACTION_VIEW,

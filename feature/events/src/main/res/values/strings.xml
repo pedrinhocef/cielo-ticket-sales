@@ -18,7 +18,9 @@
     <string name="error_start_payment">Could not start the payment. Check the Cielo configuration and try again.</string>
     <string name="payment_canceled">Payment canceled by user.</string>
     <string name="pending_payment_msg">You have a pending payment for: %1$s</string>
+    <string name="pending_payment_description">No confirmation was received. You can reopen Cielo to continue this payment.</string>
     <string name="retry_payment">Retry Payment</string>
     <string name="error_retry_payment">Could not retry the payment.</string>
     <string name="event_image_description">Image for %1$s</string>
+    <string name="error_purchase_not_found">The payment response does not match a saved purchase.</string>
 </resources>

@@ -3,16 +3,16 @@ package com.pedrosoares.cielosales.events.presentation
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.pedrosoares.cielosales.cielo.data.remote.CieloCallbackParser
-import com.pedrosoares.cielosales.cielo.data.remote.CieloPayloadBuilder
-import com.pedrosoares.cielosales.cielo.domain.model.PaymentResult
-import com.pedrosoares.cielosales.core.data.local.entity.PurchaseEntity
-import com.pedrosoares.cielosales.core.data.repository.EventRepository
-import com.pedrosoares.cielosales.core.data.repository.PendingPurchaseResult
-import com.pedrosoares.cielosales.core.data.repository.PurchaseRepository
+import com.pedrosoares.cielosales.core.domain.model.PaymentResult
+import com.pedrosoares.cielosales.core.domain.model.Purchase
 import com.pedrosoares.cielosales.core.domain.model.Event
 import com.pedrosoares.cielosales.core.domain.model.PurchaseStatus
+import com.pedrosoares.cielosales.core.domain.repository.PendingPurchaseResult
 import com.pedrosoares.cielosales.core.util.UiText
+import com.pedrosoares.cielosales.events.domain.usecase.BuildCieloPaymentUriUseCase
+import com.pedrosoares.cielosales.events.domain.usecase.ObserveEventsUseCase
+import com.pedrosoares.cielosales.events.domain.usecase.ParseCieloCallbackUseCase
+import com.pedrosoares.cielosales.events.domain.usecase.PaymentUseCases
 import com.pedrosoares.cielosales.events.R
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -25,16 +25,14 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import java.util.UUID
 import javax.inject.Inject
 
 sealed interface UiState {
     data object Loading : UiState
     data class EventList(val events: List<Event>) : UiState
-    data class ProcessingPayment(val idempotencyKey: String) : UiState
-    data class PaymentPending(val purchase: PurchaseEntity) : UiState
-    data class PaymentSuccess(val purchase: PurchaseEntity) : UiState
-    data class PaymentError(val message: UiText, val retryPurchase: PurchaseEntity? = null) : UiState
+    data class PaymentPending(val purchase: Purchase) : UiState
+    data class PaymentSuccess(val purchase: Purchase) : UiState
+    data class PaymentError(val message: UiText, val retryPurchase: Purchase? = null) : UiState
 }
 
 sealed interface EventsEffect {
@@ -43,10 +41,10 @@ sealed interface EventsEffect {
 
 @HiltViewModel
 class EventsViewModel @Inject constructor(
-    private val eventRepository: EventRepository,
-    private val purchaseRepository: PurchaseRepository,
-    private val payloadBuilder: CieloPayloadBuilder,
-    private val callbackParser: CieloCallbackParser,
+    private val observeEvents: ObserveEventsUseCase,
+    private val paymentUseCases: PaymentUseCases,
+    private val buildCieloPaymentUri: BuildCieloPaymentUriUseCase,
+    private val parseCieloCallback: ParseCieloCallbackUseCase,
     private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<UiState>(UiState.Loading)
@@ -55,11 +53,15 @@ class EventsViewModel @Inject constructor(
     private val _effect = Channel<EventsEffect>(Channel.BUFFERED)
     val effect = _effect.receiveAsFlow()
 
+    private val _isPaymentLaunchInProgress = MutableStateFlow(false)
+    val isPaymentLaunchInProgress: StateFlow<Boolean> = _isPaymentLaunchInProgress.asStateFlow()
+
     private val paymentMutex = Mutex()
     private var eventsJob: Job? = null
+    private var launchedPaymentKey: String? = null
 
     companion object {
-        const val MAX_QUANTITY_PER_ORDER = 10
+        const val MAX_QUANTITY_PER_ORDER = com.pedrosoares.cielosales.core.domain.model.PurchaseConstraints.MAX_TICKETS_PER_ORDER
         private const val KEY_IDEMPOTENCY = "current_idempotency_key"
     }
 
@@ -69,16 +71,19 @@ class EventsViewModel @Inject constructor(
     }
 
     private fun checkPendingPurchase() {
-        savedStateHandle.get<String>(KEY_IDEMPOTENCY)?.let { pendingKey ->
-            viewModelScope.launch {
-                val purchase = purchaseRepository.getPurchase(pendingKey)
-                when (purchase?.paymentStatus) {
-                    PurchaseStatus.PENDING -> _uiState.value = UiState.PaymentPending(purchase)
-                    PurchaseStatus.FAILED_TECHNICAL -> _uiState.value = UiState.PaymentError(
-                        UiText.StringResource(R.string.payment_attention), purchase
-                    )
-                    else -> savedStateHandle.remove<String>(KEY_IDEMPOTENCY)
+        viewModelScope.launch {
+            val purchase = paymentUseCases.recoverPendingPurchase(savedStateHandle.get(KEY_IDEMPOTENCY))
+
+            when (purchase?.paymentStatus) {
+                PurchaseStatus.PENDING -> {
+                    savedStateHandle[KEY_IDEMPOTENCY] = purchase.idempotencyKey
+                    _uiState.value = UiState.PaymentPending(purchase)
                 }
+                PurchaseStatus.FAILED_TECHNICAL -> {
+                    savedStateHandle[KEY_IDEMPOTENCY] = purchase.idempotencyKey
+                    _uiState.value = UiState.PaymentError(UiText.StringResource(R.string.payment_attention), purchase)
+                }
+                else -> savedStateHandle.remove<String>(KEY_IDEMPOTENCY)
             }
         }
     }
@@ -86,28 +91,17 @@ class EventsViewModel @Inject constructor(
     fun startPaymentFlow(event: Event, quantity: Int) {
         viewModelScope.launch {
             paymentMutex.withLock {
-                if (_uiState.value is UiState.ProcessingPayment || _uiState.value is UiState.PaymentPending) return@withLock
+                if (_isPaymentLaunchInProgress.value || _uiState.value is UiState.PaymentPending) return@withLock
                 try {
-                    val pendingPurchase = savedStateHandle.get<String>(KEY_IDEMPOTENCY)
-                        ?.let { purchaseRepository.getPurchase(it) }
+                    val pendingPurchase = paymentUseCases.recoverPendingPurchase(savedStateHandle.get(KEY_IDEMPOTENCY))
                     if (pendingPurchase?.paymentStatus == PurchaseStatus.PENDING) {
                         _uiState.value = UiState.PaymentPending(pendingPurchase)
                         return@withLock
                     }
-                    val validQuantity = quantity.coerceIn(1, MAX_QUANTITY_PER_ORDER)
-                    val purchase = PurchaseEntity(
-                        idempotencyKey = UUID.randomUUID().toString(),
-                        eventId = event.id,
-                        eventName = event.title,
-                        quantity = validQuantity,
-                        totalAmountInCents = Math.multiplyExact(event.priceInCents, validQuantity.toLong()),
-                        paymentStatus = PurchaseStatus.PENDING,
-                        cieloTransactionId = null
-                    )
-                    when (val result = purchaseRepository.createOrGetPending(purchase)) {
+                    when (val result = paymentUseCases.startPayment(event, quantity)) {
                         is PendingPurchaseResult.Created -> launchPurchase(result.purchase)
                         is PendingPurchaseResult.ExistingPending -> launchPurchase(result.purchase)
-                        is PendingPurchaseResult.ExistingTerminal -> showTerminalPurchase(result.purchase)
+                        is PendingPurchaseResult.ExistingTerminal -> showPersistedResult(result.purchase)
                     }
                 } catch (exception: Exception) {
                     if (exception is CancellationException) throw exception
@@ -119,24 +113,17 @@ class EventsViewModel @Inject constructor(
         }
     }
 
-    fun retryPayment(purchase: PurchaseEntity) {
+    fun retryPayment(purchase: Purchase) {
         viewModelScope.launch {
             paymentMutex.withLock {
-                if (_uiState.value is UiState.ProcessingPayment) return@withLock
+                if (_isPaymentLaunchInProgress.value) return@withLock
                 try {
-                    val stored = purchaseRepository.getPurchase(purchase.idempotencyKey) ?: return@withLock
-                    val activePurchase = when (stored.paymentStatus) {
-                        PurchaseStatus.PENDING -> stored
-                        PurchaseStatus.FAILED_TECHNICAL -> {
-                            if (!purchaseRepository.resetTechnicalFailureForRetry(stored.idempotencyKey)) return@withLock
-                            purchaseRepository.getPurchase(stored.idempotencyKey) ?: return@withLock
-                        }
-                        else -> {
-                            showTerminalPurchase(stored)
-                            return@withLock
-                        }
+                    val stored = paymentUseCases.retryPayment(purchase.idempotencyKey) ?: return@withLock
+                    if (stored.paymentStatus != PurchaseStatus.PENDING) {
+                        showPersistedResult(stored)
+                        return@withLock
                     }
-                    launchPurchase(activePurchase)
+                    launchPurchase(stored)
                 } catch (exception: Exception) {
                     if (exception is CancellationException) throw exception
                     _uiState.value = UiState.PaymentError(UiText.StringResource(R.string.error_retry_payment), purchase)
@@ -145,18 +132,10 @@ class EventsViewModel @Inject constructor(
         }
     }
 
-    private suspend fun launchPurchase(purchase: PurchaseEntity) {
+    private suspend fun launchPurchase(purchase: Purchase) {
         savedStateHandle[KEY_IDEMPOTENCY] = purchase.idempotencyKey
-        _uiState.value = UiState.ProcessingPayment(purchase.idempotencyKey)
-        val unitPrice = purchase.totalAmountInCents / purchase.quantity
-        require(unitPrice * purchase.quantity == purchase.totalAmountInCents) { "Invalid persisted purchase total" }
-        val uri = payloadBuilder.buildPaymentUri(
-            unitPriceInCents = unitPrice,
-            idempotencyKey = purchase.idempotencyKey,
-            eventId = purchase.eventId,
-            eventName = purchase.eventName,
-            quantity = purchase.quantity
-        )
+        val uri = buildCieloPaymentUri(purchase)
+        _isPaymentLaunchInProgress.value = true
         _effect.send(EventsEffect.LaunchCieloPayment(uri, purchase.idempotencyKey))
     }
 
@@ -164,8 +143,8 @@ class EventsViewModel @Inject constructor(
         eventsJob?.cancel()
         eventsJob = viewModelScope.launch {
             _uiState.value = UiState.Loading
-            eventRepository.getEvents().collect { events ->
-                if (_uiState.value !is UiState.PaymentPending && _uiState.value !is UiState.ProcessingPayment) {
+            observeEvents().collect { events ->
+                if (_uiState.value !is UiState.PaymentPending) {
                     _uiState.value = UiState.EventList(events)
                 }
             }
@@ -174,18 +153,15 @@ class EventsViewModel @Inject constructor(
 
     fun onPaymentResultReceived(uri: android.net.Uri) {
         val expectedKey = savedStateHandle.get<String>(KEY_IDEMPOTENCY).orEmpty()
-        processPaymentResult(callbackParser.parse(uri, expectedKey))
+        processPaymentResult(parseCieloCallback(uri, expectedKey))
     }
 
     fun onCieloLaunchFailed(idempotencyKey: String) {
         viewModelScope.launch {
             paymentMutex.withLock {
-                purchaseRepository.completePending(
-                    key = idempotencyKey,
-                    status = PurchaseStatus.FAILED_TECHNICAL,
-                    reason = "Cielo payment application was not found"
-                )
-                purchaseRepository.getPurchase(idempotencyKey)?.let { purchase ->
+                _isPaymentLaunchInProgress.value = false
+                launchedPaymentKey = null
+                paymentUseCases.registerLaunchFailure(idempotencyKey)?.let { purchase ->
                     savedStateHandle[KEY_IDEMPOTENCY] = idempotencyKey
                     if (purchase.paymentStatus == PurchaseStatus.FAILED_TECHNICAL) {
                         _uiState.value = UiState.PaymentError(
@@ -199,25 +175,37 @@ class EventsViewModel @Inject constructor(
         }
     }
 
+    fun onCieloPaymentLaunched(idempotencyKey: String) {
+        launchedPaymentKey = idempotencyKey
+    }
+
+    fun onHostResumed() {
+        val idempotencyKey = launchedPaymentKey ?: return
+
+        viewModelScope.launch {
+            try {
+                paymentUseCases.findPendingPurchase(idempotencyKey)?.let { purchase ->
+                    _uiState.value = UiState.PaymentPending(purchase)
+                }
+            } finally {
+                _isPaymentLaunchInProgress.value = false
+                launchedPaymentKey = null
+            }
+        }
+    }
+
     fun processPaymentResult(result: PaymentResult) {
         viewModelScope.launch {
             paymentMutex.withLock {
-                val status = when (result) {
-                    is PaymentResult.Success -> PurchaseStatus.APPROVED
-                    is PaymentResult.Denied -> PurchaseStatus.DENIED
-                    is PaymentResult.Canceled -> PurchaseStatus.CANCELED
-                    is PaymentResult.FailedTechnical, is PaymentResult.Error -> PurchaseStatus.FAILED_TECHNICAL
-                }
                 try {
-                    purchaseRepository.completePending(
-                        key = result.idempotencyKey,
-                        status = status,
-                        transactionId = (result as? PaymentResult.Success)?.transactionId,
-                        reason = (result as? PaymentResult.Denied)?.reason
-                            ?: (result as? PaymentResult.FailedTechnical)?.message
-                            ?: (result as? PaymentResult.Error)?.message
-                    )
-                    purchaseRepository.getPurchase(result.idempotencyKey)?.let { purchase ->
+                    _isPaymentLaunchInProgress.value = false
+                    launchedPaymentKey = null
+                    val purchase = paymentUseCases.completePayment(result)
+                    if (purchase == null) {
+                        _uiState.value = UiState.PaymentError(
+                            UiText.StringResource(R.string.error_purchase_not_found)
+                        )
+                    } else {
                         showPersistedResult(purchase, result)
                     }
                 } catch (exception: Exception) {
@@ -230,11 +218,7 @@ class EventsViewModel @Inject constructor(
         }
     }
 
-    private fun showTerminalPurchase(purchase: PurchaseEntity) {
-        showPersistedResult(purchase)
-    }
-
-    private fun showPersistedResult(purchase: PurchaseEntity, callback: PaymentResult? = null) {
+    private fun showPersistedResult(purchase: Purchase, callback: PaymentResult? = null) {
         when (purchase.paymentStatus) {
             PurchaseStatus.APPROVED -> {
                 _uiState.value = UiState.PaymentSuccess(purchase)

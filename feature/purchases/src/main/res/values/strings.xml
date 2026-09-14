@@ -1,0 +1,20 @@
+<resources>
+    <string name="purchases_title">Meus ingressos</string>
+    <string name="purchases_empty_state">Nenhum ingresso encontrado para este filtro.</string>
+    <string name="purchase_quantity_and_total">%1$d ingresso(s) • %2$s</string>
+    <string name="purchase_filter_all">Todos</string>
+    <string name="purchase_filter_approved">Aprovados</string>
+    <string name="purchase_filter_pending">Pendentes</string>
+    <string name="purchase_filter_canceled">Cancelados</string>
+    <string name="purchase_filter_denied">Negados</string>
+    <string name="purchase_filter_failed">Falhas</string>
+    <string name="purchase_status_pending">Pendente</string>
+    <string name="purchase_status_approved">Aprovado</string>
+    <string name="purchase_status_denied">Negado</string>
+    <string name="purchase_status_canceled">Cancelado</string>
+    <string name="purchase_status_failed">Falha técnica</string>
+    <string name="ticket_qr_title">Ingresso</string>
+    <string name="ticket_qr_description">QR Code do ingresso</string>
+    <string name="ticket_qr_close">Fechar</string>
+    <string name="ticket_qr_open">Abrir QR Code do ingresso %1$s</string>
+</resources>

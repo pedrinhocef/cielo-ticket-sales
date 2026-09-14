@@ -23,10 +23,16 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.repeatOnLifecycle
 import coil3.compose.AsyncImage
 import com.pedrosoares.cielosales.core.domain.model.Event
+import com.pedrosoares.cielosales.core.domain.model.PurchaseConstraints
 import com.pedrosoares.cielosales.events.R
-import com.pedrosoares.cielosales.events.util.QrCodeGenerator
+import com.pedrosoares.cielosales.core.ui.TicketQrCodeGenerator
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -34,19 +40,36 @@ import java.util.Locale
 fun EventsScreen(
     viewModel: EventsViewModel
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val isPaymentLaunchInProgress by viewModel.isPaymentLaunchInProgress.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
 
-    LaunchedEffect(Unit) {
-        viewModel.effect.collect { effect ->
-            when (effect) {
-                is EventsEffect.LaunchCieloPayment -> {
-                    launchCieloPayment(context, effect) {
-                        viewModel.onCieloLaunchFailed(effect.idempotencyKey)
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewModel.effect.collect { effect ->
+                when (effect) {
+                    is EventsEffect.LaunchCieloPayment -> {
+                        launchCieloPayment(
+                            context = context,
+                            effect = effect,
+                            onLaunchStarted = { viewModel.onCieloPaymentLaunched(effect.idempotencyKey) },
+                            onLaunchFailed = { viewModel.onCieloLaunchFailed(effect.idempotencyKey) }
+                        )
                     }
                 }
             }
         }
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.onHostResumed()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     Scaffold(
@@ -56,47 +79,59 @@ fun EventsScreen(
             when (val state = uiState) {
                 is UiState.Loading -> CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
 
-                is UiState.ProcessingPayment -> {
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        CircularProgressIndicator()
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(stringResource(R.string.loading_payment))
-                    }
-                }
-
                 is UiState.PaymentPending -> {
                     Column(
                         modifier = Modifier.fillMaxSize().padding(24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        Text(stringResource(R.string.payment_attention), style = MaterialTheme.typography.titleLarge)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(stringResource(R.string.pending_payment_msg, state.purchase.eventName))
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(onClick = { viewModel.retryPayment(state.purchase) }) {
-                            Text(stringResource(R.string.retry_payment))
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(20.dp)) {
+                                Text(
+                                    stringResource(R.string.payment_attention),
+                                    style = MaterialTheme.typography.titleLarge
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(stringResource(R.string.pending_payment_msg, state.purchase.eventName))
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    stringResource(R.string.pending_payment_description),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
                         }
-                        TextButton(onClick = { viewModel.loadEvents() }) {
+                        Spacer(modifier = Modifier.height(24.dp))
+                        PaymentRetryButton(
+                            isLoading = isPaymentLaunchInProgress,
+                            onClick = { viewModel.retryPayment(state.purchase) }
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        TextButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = { viewModel.loadEvents() }
+                        ) {
                             Text(stringResource(R.string.back_to_list))
                         }
                     }
                 }
 
                 is UiState.EventList -> {
-                    EventList(
-                        events = state.events,
-                        onSelect = { event, quantity -> viewModel.startPaymentFlow(event, quantity) }
-                    )
+                    Box {
+                        EventList(
+                            events = state.events,
+                            onSelect = { event, quantity -> viewModel.startPaymentFlow(event, quantity) }
+                        )
+                        if (isPaymentLaunchInProgress) PaymentLaunchOverlay()
+                    }
                 }
 
                 is UiState.PaymentSuccess -> {
                     val bitmap = remember(state.purchase.idempotencyKey) {
-                        QrCodeGenerator.generateQrCode(state.purchase.idempotencyKey)
+                        TicketQrCodeGenerator.generate(state.purchase.idempotencyKey)
                     }
                     Column(
                         modifier = Modifier.fillMaxSize().padding(24.dp),
@@ -136,9 +171,10 @@ fun EventsScreen(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         state.retryPurchase?.let { purchase ->
-                            Button(onClick = { viewModel.retryPayment(purchase) }) {
-                                Text(stringResource(R.string.retry_payment))
-                            }
+                            PaymentRetryButton(
+                                isLoading = isPaymentLaunchInProgress,
+                                onClick = { viewModel.retryPayment(purchase) }
+                            )
                             Spacer(modifier = Modifier.height(8.dp))
                         }
                         Button(onClick = { viewModel.loadEvents() }) {
@@ -151,9 +187,55 @@ fun EventsScreen(
     }
 }
 
+@Composable
+private fun PaymentLaunchOverlay() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.88f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Card {
+            Row(
+                modifier = Modifier.padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 3.dp)
+                Spacer(modifier = Modifier.width(16.dp))
+                Text(stringResource(R.string.loading_payment))
+            }
+        }
+    }
+}
+
+@Composable
+private fun PaymentRetryButton(
+    isLoading: Boolean,
+    onClick: () -> Unit
+) {
+    Button(
+        modifier = Modifier.fillMaxWidth(),
+        enabled = !isLoading,
+        onClick = onClick
+    ) {
+        if (isLoading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(18.dp),
+                color = MaterialTheme.colorScheme.onPrimary,
+                strokeWidth = 2.dp
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(stringResource(R.string.loading_payment))
+        } else {
+            Text(stringResource(R.string.retry_payment))
+        }
+    }
+}
+
 internal fun launchCieloPayment(
     context: Context,
     effect: EventsEffect.LaunchCieloPayment,
+    onLaunchStarted: () -> Unit,
     onLaunchFailed: () -> Unit
 ) {
     try {
@@ -161,6 +243,7 @@ internal fun launchCieloPayment(
             addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
         context.startActivity(intent)
+        onLaunchStarted()
     } catch (_: ActivityNotFoundException) {
         onLaunchFailed()
     }
@@ -229,8 +312,8 @@ fun EventItem(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(
-                        onClick = { if (quantity > 1) quantity-- },
-                        enabled = quantity > 1
+                        onClick = { if (quantity > PurchaseConstraints.MIN_TICKETS_PER_ORDER) quantity-- },
+                        enabled = quantity > PurchaseConstraints.MIN_TICKETS_PER_ORDER
                     ) {
                         Text("-", style = MaterialTheme.typography.titleLarge)
                     }
@@ -249,7 +332,11 @@ fun EventItem(
 
                 val totalCents = event.priceInCents * quantity
                 val totalInReais = java.math.BigDecimal(totalCents)
-                    .divide(java.math.BigDecimal(100), 2, java.math.RoundingMode.HALF_EVEN)
+                    .divide(
+                        java.math.BigDecimal(PurchaseConstraints.CENTS_PER_BRL),
+                        CURRENCY_FRACTION_DIGITS,
+                        java.math.RoundingMode.HALF_EVEN
+                    )
 
                 val formattedPrice = java.text.NumberFormat.getCurrencyInstance(Locale.forLanguageTag("pt-BR"))
                     .format(totalInReais)
@@ -272,6 +359,8 @@ private val previewEvents = listOf(
     Event("preview-1", "Silva Live Show", "Saquarema Arena", 12000L, "https://picsum.photos/seed/silva/800/450"),
     Event("preview-2", "Winter Festival", "Convention Center", 25000L, "https://picsum.photos/seed/winter/800/450")
 )
+
+private const val CURRENCY_FRACTION_DIGITS = 2
 
 @Preview(showBackground = true, widthDp = 360)
 @Composable
