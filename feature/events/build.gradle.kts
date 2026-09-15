@@ -26,7 +26,7 @@ android {
 
 dependencies {
     implementation(project(":core"))
-    implementation(project(":core:observability"))
+    implementation(project(":observability"))
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)

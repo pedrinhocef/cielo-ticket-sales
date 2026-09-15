@@ -32,6 +32,6 @@
 
 - Registre eventos por meio do contrato `Observability`; features não podem depender diretamente de Logcat, Room ou provedores externos.
 - Nunca registre credenciais, payloads, URIs completas, referências de idempotência, IDs de transação ou mensagens de exceção não sanitizadas.
-- Use somente nomes, etapas, códigos e dimensões tipadas definidos em `:core:observability`.
+- Use somente nomes, etapas, códigos e dimensões tipadas definidos em `:observability`.
 - Falhas de observabilidade nunca podem interromper ou alterar o fluxo de pagamento.
 - Diagnósticos locais usam banco separado, com retenção limitada; a tabela de compras não é armazenamento de analytics.

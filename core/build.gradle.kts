@@ -30,7 +30,7 @@ ksp {
 }
 
 dependencies {
-    implementation(project(":core:observability"))
+    implementation(project(":observability"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.zxing.core)
 

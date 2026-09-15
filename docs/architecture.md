@@ -13,7 +13,7 @@ Compose UI -> ViewModel -> Use case -> Domain repository -> Data implementation
 - `:feature:cielo` implementa `PaymentGateway`, adaptando payload e callback do contrato Cielo sem expor suas classes à feature de Eventos.
 - `:feature:events` contém a lista de eventos, casos de uso focados e o ViewModel. Recuperação, início, retry, conclusão, callback e construção do deep link possuem responsabilidades separadas.
 - `:feature:purchases` contém o histórico, filtros e detalhes de compras.
-- `:core:observability` contém o contrato transversal, eventos tipados, sanitização, Logcat e persistência diagnóstica limitada.
+- `:observability` contém o contrato transversal, eventos tipados, sanitização, Logcat e persistência diagnóstica limitada.
 
 Os contratos expõem modelos de domínio. A entidade Room e seus mapeamentos permanecem em `:core:data`, sem vazar para ViewModels, telas ou casos de uso.
 

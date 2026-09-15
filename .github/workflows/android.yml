@@ -15,4 +15,4 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew lintDebug test :feature:purchases:assembleDebugAndroidTest :app:assembleDebug --no-daemon
+      - run: ./gradlew lintDebug test :feature:purchases:assembleDebugAndroidTest :app:assembleDebug :app:assembleRelease --no-daemon

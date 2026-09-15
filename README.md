@@ -16,6 +16,8 @@ O QR Code deste MVP contém uma referência local de compra para demonstrar a ex
 
 > O fluxo foi validado manualmente com o emulador Cielo. Essa integração externa não faz parte do CI; o contrato existente de Deep Link foi preservado e não foram inventados parâmetros, SDKs ou comportamentos de terminal.
 
+O CI valida lint, testes unitários, compilação dos testes Compose e builds debug/release em cada pull request. O release habilita R8 para minificação, otimização, ofuscação e remoção de recursos não utilizados.
+
 ## Arquitetura
 
 O app adota MVVM com Clean Architecture pragmática. A UI é declarativa, ViewModels coordenam intenções e estados, e regras de pagamento ficam em casos de uso pequenos e testáveis. Contratos e modelos de domínio não dependem de Room; o adaptador Cielo permanece isolado em sua feature.
@@ -64,7 +66,7 @@ flowchart LR
  ├── modelos, PaymentGateway e contratos de domínio
  └── Room, DAO e implementações de repositório
 
-:core:observability
+:observability
  ├── contrato e eventos tipados
  ├── fachada tolerante a falhas
  ├── Logcat estruturado
@@ -77,7 +79,7 @@ Os casos de uso de pagamento são separados por intenção: observar eventos, re
 
 ### Observabilidade e privacidade
 
-O módulo `:core:observability` recebe eventos tipados das features e distribui cada registro para sinks independentes. O MVP envia eventos sanitizados ao Logcat e mantém no máximo 300 diagnósticos em um banco Room separado. Se qualquer sink falhar, os demais e o fluxo de pagamento continuam normalmente.
+O módulo `:observability` recebe eventos tipados das features e distribui cada registro para sinks independentes. O MVP envia eventos sanitizados ao Logcat e mantém no máximo 300 diagnósticos em um banco Room separado. Se qualquer sink falhar, os demais e o fluxo de pagamento continuam normalmente.
 
 São registrados apenas etapa, resultado, status, origem de recuperação, quantidade e filtro. O módulo proíbe payloads, URIs completas, credenciais, referências de compra, IDs de transação e mensagens livres de exceção. Consulte [Observabilidade](docs/observability.md) para o catálogo e as responsabilidades.
 

@@ -21,10 +21,11 @@ android {
 
 dependencies {
     implementation(project(":core"))
-    implementation(project(":core:observability"))
+    implementation(project(":observability"))
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)

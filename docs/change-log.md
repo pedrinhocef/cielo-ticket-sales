@@ -25,11 +25,12 @@
 
 - Testes cobrem o caso de uso de pagamento, recuperação por banco, callback após process death sem `SavedStateHandle`, retorno sem callback, proteção de idempotência e filtros do histórico.
 - Testes Compose instrumentados verificam a lista de ingressos, estado vazio e seleção de filtro; o APK de testes é compilado no CI/local e executado em emulador ou dispositivo Android.
+- O build release usa R8 com minificação, otimização e redução de recursos; o CI também compila essa variante para detectar incompatibilidades antes do merge.
 - A suíte `./gradlew test` e o build `./gradlew :app:assembleDebug` foram executados com sucesso após as mudanças.
 
 ## Observabilidade desacoplada
 
-- Novo módulo `:core:observability` com contrato, eventos, etapas, dimensões e códigos de erro tipados.
+- Novo módulo `:observability` com contrato, eventos, etapas, dimensões e códigos de erro tipados.
 - Fachada tolerante a falhas distribui registros para Logcat e armazenamento local sem impactar o pagamento.
 - Diagnósticos ficam em banco Room separado e limitado aos 300 registros mais recentes.
 - Pagamento, retry, recuperação, abertura da Cielo, callback, transições persistidas, filtros e QR Code possuem eventos sanitizados.

@@ -1,6 +1,6 @@
 # Observabilidade
 
-O módulo `:core:observability` concentra analytics de produto, diagnóstico técnico e auditoria sanitizada do fluxo. Features dependem apenas de `Observability`; Logcat, Room e futuros provedores remotos permanecem detalhes substituíveis.
+O módulo `:observability` concentra analytics de produto, diagnóstico técnico e auditoria sanitizada do fluxo. Features dependem apenas de `Observability`; Logcat, Room e futuros provedores remotos permanecem detalhes substituíveis.
 
 ## Fluxo
 

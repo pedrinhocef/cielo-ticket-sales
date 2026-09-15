@@ -60,7 +60,7 @@
   <text class="module-text" x="1008" y="360">App externo</text>
 
   <rect class="module" x="355" y="650" width="575" height="110" fill="#e6fffa" stroke="#319795"/>
-  <text class="module-title" x="383" y="690">:core:observability</text>
+  <text class="module-title" x="383" y="690">:observability</text>
   <text class="module-text" x="383" y="722">Eventos tipados e sanitizados</text>
   <text class="module-text" x="680" y="722">Logcat + Room limitado</text>
 
