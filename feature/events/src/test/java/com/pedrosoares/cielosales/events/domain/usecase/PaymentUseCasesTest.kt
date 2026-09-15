@@ -11,9 +11,13 @@ import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import com.pedrosoares.cielosales.observability.api.Observability
+import com.pedrosoares.cielosales.observability.api.ObservabilityEventName
+import io.mockk.verify
 
 class PaymentUseCasesTest {
     private val purchaseRepository: PurchaseRepository = mockk(relaxed = true)
+    private val observability: Observability = mockk(relaxed = true)
 
     @Test
     fun `When saved reference is unavailable then should restore the single pending database purchase`() = runTest {
@@ -34,10 +38,13 @@ class PaymentUseCasesTest {
             listOf(failedPurchase, pendingPurchase)
         coEvery { purchaseRepository.resetTechnicalFailureForRetry(failedPurchase.idempotencyKey) } returns true
 
-        val retriedPurchase = RetryPaymentUseCase(purchaseRepository)(failedPurchase.idempotencyKey)
+        val retriedPurchase = RetryPaymentUseCase(purchaseRepository, observability)(failedPurchase.idempotencyKey)
 
         assertEquals(pendingPurchase, retriedPurchase)
         coVerify { purchaseRepository.resetTechnicalFailureForRetry(failedPurchase.idempotencyKey) }
+        verify {
+            observability.track(match { it.name == ObservabilityEventName.PAYMENT_RETRY_COMPLETED })
+        }
     }
 
     @Test

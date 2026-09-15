@@ -39,6 +39,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import com.pedrosoares.cielosales.observability.api.Observability
+import com.pedrosoares.cielosales.observability.api.ObservabilityEventName
+import io.mockk.verify
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -50,6 +53,7 @@ class EventsViewModelTest {
     private val purchaseRepository: PurchaseRepository = mockk(relaxed = true)
     private val paymentGateway: PaymentGateway = mockk()
     private val savedStateHandle: SavedStateHandle = SavedStateHandle()
+    private val observability: Observability = mockk(relaxed = true)
     private val observeEventsUseCase = ObserveEventsUseCase(eventRepository)
     private val paymentUseCases = PaymentUseCases(
         RecoverPendingPurchaseUseCase(purchaseRepository),
@@ -76,7 +80,8 @@ class EventsViewModelTest {
             paymentUseCases,
             buildCieloPaymentUriUseCase,
             parseCieloCallbackUseCase,
-            savedStateHandle
+            savedStateHandle,
+            observability
         )
     }
 
@@ -252,6 +257,9 @@ class EventsViewModelTest {
 
         assertEquals(UiState.PaymentPending(purchase), viewModel.uiState.value)
         assertTrue(!viewModel.isPaymentLaunchInProgress.value)
+        verify {
+            observability.track(match { it.name == ObservabilityEventName.APP_RETURNED_WITHOUT_CALLBACK })
+        }
     }
 
     @Test

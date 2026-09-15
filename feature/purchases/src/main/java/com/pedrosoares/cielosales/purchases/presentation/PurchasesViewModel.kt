@@ -12,6 +12,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
+import com.pedrosoares.cielosales.observability.api.NoOpObservability
+import com.pedrosoares.cielosales.observability.api.Observability
+import com.pedrosoares.cielosales.observability.api.ObservabilityDimension
+import com.pedrosoares.cielosales.observability.api.ObservabilityEventName
+import com.pedrosoares.cielosales.observability.api.ObservabilityErrorCode
+import com.pedrosoares.cielosales.observability.api.ObservabilityStage
+import com.pedrosoares.cielosales.observability.api.record
+import com.pedrosoares.cielosales.observability.api.track
 
 enum class PurchaseFilter(val status: PurchaseStatus?) {
     ALL(null), APPROVED(PurchaseStatus.APPROVED), PENDING(PurchaseStatus.PENDING),
@@ -25,7 +33,8 @@ data class PurchasesUiState(
 
 @HiltViewModel
 class PurchasesViewModel @Inject constructor(
-    purchaseRepository: PurchaseRepository
+    purchaseRepository: PurchaseRepository,
+    private val observability: Observability = NoOpObservability
 ) : ViewModel() {
     private companion object {
         const val STOP_OBSERVING_DELAY_MILLIS = 5_000L
@@ -45,5 +54,25 @@ class PurchasesViewModel @Inject constructor(
 
     fun selectFilter(filter: PurchaseFilter) {
         selectedFilter.value = filter
+        observability.track(
+            ObservabilityEventName.PURCHASE_FILTER_SELECTED,
+            ObservabilityStage.HISTORY,
+            ObservabilityDimension.FILTER to filter.name
+        )
+    }
+
+    fun onTicketQrOpened() {
+        observability.track(
+            ObservabilityEventName.TICKET_QR_OPENED,
+            ObservabilityStage.QR_CODE
+        )
+    }
+
+    fun onQrCodeGenerationFailed(exception: Exception) {
+        observability.record(
+            ObservabilityErrorCode.QR_CODE_GENERATION_FAILED,
+            ObservabilityStage.QR_CODE,
+            exception
+        )
     }
 }

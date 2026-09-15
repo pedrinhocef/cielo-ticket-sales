@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img" aria-labelledby="title description">
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="840" viewBox="0 0 1200 840" role="img" aria-labelledby="title description">
   <title id="title">Arquitetura modular do Cielo Ticket Sales</title>
-  <desc id="description">Diagrama da comunicação entre app, features, domínio, dados locais e Cielo Smart.</desc>
+  <desc id="description">Diagrama da comunicação entre app, features, domínio, observabilidade, dados locais e Cielo Smart.</desc>
   <defs>
     <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
       <path d="M0,0 L0,6 L9,3 z" fill="#456078"/>
@@ -18,11 +18,11 @@
     </style>
   </defs>
 
-  <rect class="background" width="1200" height="720" rx="24"/>
+  <rect class="background" width="1200" height="840" rx="24"/>
   <text class="title" x="60" y="64">Cielo Ticket Sales — comunicação entre módulos</text>
   <text class="subtitle" x="60" y="94">Dependências seguem para dentro; o retorno de pagamento entra pelo callback e é persistido antes da UI reagir.</text>
 
-  <rect class="boundary" x="38" y="126" width="1124" height="518"/>
+  <rect class="boundary" x="38" y="126" width="1124" height="680"/>
   <text class="subtitle" x="60" y="154">Aplicativo Android</text>
 
   <rect class="module" x="70" y="192" width="210" height="160" fill="#d9eafd" stroke="#4299e1"/>
@@ -59,6 +59,11 @@
   <text class="module-title" x="1008" y="328">Smart</text>
   <text class="module-text" x="1008" y="360">App externo</text>
 
+  <rect class="module" x="355" y="650" width="575" height="110" fill="#e6fffa" stroke="#319795"/>
+  <text class="module-title" x="383" y="690">:core:observability</text>
+  <text class="module-text" x="383" y="722">Eventos tipados e sanitizados</text>
+  <text class="module-text" x="680" y="722">Logcat + Room limitado</text>
+
   <path class="flow" d="M280 270 H355"/>
   <text class="flow-label" x="292" y="250">compõe</text>
   <path class="flow" d="M615 340 L710 470"/>
@@ -71,4 +76,8 @@
   <text class="flow-label" x="932" y="258">Deep Link</text>
   <path class="flow" d="M1050 398 V604 H175 V352"/>
   <text class="flow-label" x="716" y="626">callback → Activity → ViewModel</text>
+  <path class="flow" d="M485 382 V650"/>
+  <path class="flow" d="M485 576 V650"/>
+  <path class="flow" d="M820 576 V650"/>
+  <text class="flow-label" x="520" y="640">eventos e erros sanitizados</text>
 </svg>

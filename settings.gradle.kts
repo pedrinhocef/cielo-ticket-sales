@@ -25,6 +25,7 @@ dependencyResolutionManagement {
 rootProject.name = "Cielo Ticket Sales"
 include(":app")
 include(":core")
+include(":core:observability")
 include(":feature:events")
 include(":feature:cielo")
 include(":feature:purchases")

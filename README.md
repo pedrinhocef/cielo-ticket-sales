@@ -10,10 +10,11 @@ MVP Android de venda de ingressos com pagamento App-to-App pela Cielo Smart. O p
 - Recuperação de uma compra pendente após retorno ao app ou *process death*.
 - Histórico “Meus ingressos” persistido no Room, com filtros por todos os estados de pagamento.
 - QR Code para compras aprovadas.
+- Observabilidade estruturada e desacoplada para pagamento, recuperação, callback e histórico.
 
 O QR Code deste MVP contém uma referência local de compra para demonstrar a experiência de reabertura do ingresso. Ele não é assinado nem validado por servidor e, portanto, não representa um mecanismo antifraude de produção.
 
-> O teste ponta a ponta com o emulador Cielo ainda é uma validação manual pendente deste MVP. O contrato existente de Deep Link foi preservado; não foram inventados parâmetros, SDKs ou comportamentos de terminal.
+> O fluxo foi validado manualmente com o emulador Cielo. Essa integração externa não faz parte do CI; o contrato existente de Deep Link foi preservado e não foram inventados parâmetros, SDKs ou comportamentos de terminal.
 
 ## Arquitetura
 
@@ -31,6 +32,12 @@ flowchart LR
     CIELO --> APP[Cielo Smart via Deep Link]
     APP --> CALLBACK[Activity de callback]
     CALLBACK --> VM
+    VM --> OBS[Observability]
+    UC --> OBS
+    DATA --> OBS
+    CIELO --> OBS
+    OBS --> LOGCAT[Logcat estruturado]
+    OBS --> DIAGNOSTICS[(Room diagnóstico limitado)]
 ```
 
 ### Isolamento de módulos
@@ -56,11 +63,23 @@ flowchart LR
 :core
  ├── modelos, PaymentGateway e contratos de domínio
  └── Room, DAO e implementações de repositório
+
+:core:observability
+ ├── contrato e eventos tipados
+ ├── fachada tolerante a falhas
+ ├── Logcat estruturado
+ └── banco diagnóstico separado com retenção limitada
 ```
 
 O contrato `PurchaseRepository` pertence ao domínio e expõe o modelo `Purchase`. `RoomPurchaseRepository` fica na camada de dados e é o único ponto que conhece a entidade Room e os mapeamentos. Assim, as telas, ViewModels e casos de uso não dependem de anotações ou tipos de persistência.
 
 Os casos de uso de pagamento são separados por intenção: observar eventos, recuperar pendência, iniciar compra, repetir falha técnica, concluir callback, registrar falha de abertura, localizar pendência, montar o Deep Link e interpretar o callback. A comunicação de pagamento ocorre pelo contrato de domínio `PaymentGateway`, implementado pela feature Cielo. A `EventsViewModel` mantém somente estado de tela, efeitos, concorrência de UI e a referência temporária no `SavedStateHandle`.
+
+### Observabilidade e privacidade
+
+O módulo `:core:observability` recebe eventos tipados das features e distribui cada registro para sinks independentes. O MVP envia eventos sanitizados ao Logcat e mantém no máximo 300 diagnósticos em um banco Room separado. Se qualquer sink falhar, os demais e o fluxo de pagamento continuam normalmente.
+
+São registrados apenas etapa, resultado, status, origem de recuperação, quantidade e filtro. O módulo proíbe payloads, URIs completas, credenciais, referências de compra, IDs de transação e mensagens livres de exceção. Consulte [Observabilidade](docs/observability.md) para o catálogo e as responsabilidades.
 
 ## Segurança e resiliência do pagamento
 
@@ -120,6 +139,7 @@ Os testes unitários e de UI cobrem os caminhos sensíveis:
 - restauração após *process death* e fallback para banco;
 - retorno sem callback, sem loading infinito;
 - filtros, estado vazio e listagem de “Meus ingressos”.
+- isolamento de falhas de observabilidade, retenção local e emissão de eventos críticos.
 
 Os testes seguem o padrão de nomes `When … then …`; nos instrumentados Android o equivalente `when..._then...` é usado porque o formato DEX não aceita espaços no nome do método.
 
@@ -142,4 +162,5 @@ Referências: [pagamento](https://docs.cielo.com.br/cielo-smart/docs/pagamento),
 - [Máquina de estados de pagamento](docs/payment-state-machine.md)
 - [Prompt de refatoração reproduzível](docs/refactor-prompt.md)
 - [Histórico de mudanças](docs/change-log.md)
+- [Observabilidade](docs/observability.md)
 - [Diretrizes de contribuição e IA](AGENTS.md)

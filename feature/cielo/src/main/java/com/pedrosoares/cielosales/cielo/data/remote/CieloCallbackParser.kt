@@ -5,8 +5,14 @@ import android.util.Base64
 import com.pedrosoares.cielosales.core.domain.model.PaymentResult
 import org.json.JSONObject
 import javax.inject.Inject
+import com.pedrosoares.cielosales.observability.api.Observability
+import com.pedrosoares.cielosales.observability.api.ObservabilityErrorCode
+import com.pedrosoares.cielosales.observability.api.ObservabilityStage
+import com.pedrosoares.cielosales.observability.api.record
 
-class CieloCallbackParser @Inject constructor() {
+class CieloCallbackParser @Inject constructor(
+    private val observability: Observability
+) {
     private companion object {
         const val CALLBACK_CODE_APPROVED = 0
         const val CALLBACK_CODE_CANCELED = 1
@@ -21,6 +27,7 @@ class CieloCallbackParser @Inject constructor() {
         val responseBase64 = uri.getQueryParameter("response")
 
         if (responseBase64.isNullOrBlank()) {
+            observability.record(ObservabilityErrorCode.CALLBACK_INVALID, ObservabilityStage.CALLBACK)
             return PaymentResult.Error("Missing 'response' parameter", expectedReference)
         }
 
@@ -38,10 +45,15 @@ class CieloCallbackParser @Inject constructor() {
             }
 
             if (reference.isBlank()) {
+                observability.record(ObservabilityErrorCode.CALLBACK_INVALID, ObservabilityStage.CALLBACK)
                 return PaymentResult.FailedTechnical("Payment response has no reference", expectedReference)
             }
 
             if (expectedReference.isNotBlank() && reference != expectedReference) {
+                observability.record(
+                    ObservabilityErrorCode.CALLBACK_CORRELATION_FAILED,
+                    ObservabilityStage.CALLBACK
+                )
                 return PaymentResult.FailedTechnical(
                     "Correlation failure: expected $expectedReference but got $reference",
                     expectedReference
@@ -68,7 +80,12 @@ class CieloCallbackParser @Inject constructor() {
             } else {
                 PaymentResult.FailedTechnical("Payment response has no valid approved transaction", reference)
             }
-        } catch (_: Exception) {
+        } catch (exception: Exception) {
+            observability.record(
+                ObservabilityErrorCode.CALLBACK_INVALID,
+                ObservabilityStage.CALLBACK,
+                exception
+            )
             PaymentResult.FailedTechnical("Invalid payment response", expectedReference)
         }
     }

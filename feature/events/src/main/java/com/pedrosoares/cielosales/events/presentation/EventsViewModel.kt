@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.pedrosoares.cielosales.core.domain.model.PaymentResult
 import com.pedrosoares.cielosales.core.domain.model.Purchase
 import com.pedrosoares.cielosales.core.domain.model.Event
+import com.pedrosoares.cielosales.core.domain.model.PurchaseConstraints
 import com.pedrosoares.cielosales.core.domain.model.PurchaseStatus
 import com.pedrosoares.cielosales.core.domain.repository.PendingPurchaseResult
 import com.pedrosoares.cielosales.core.util.UiText
@@ -26,6 +27,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
+import com.pedrosoares.cielosales.observability.api.NoOpObservability
+import com.pedrosoares.cielosales.observability.api.Observability
+import com.pedrosoares.cielosales.observability.api.ObservabilityErrorCode
+import com.pedrosoares.cielosales.observability.api.ObservabilityEventName
+import com.pedrosoares.cielosales.observability.api.ObservabilityStage
+import com.pedrosoares.cielosales.observability.api.record
+import com.pedrosoares.cielosales.observability.api.track
 
 sealed interface UiState {
     data object Loading : UiState
@@ -45,7 +53,8 @@ class EventsViewModel @Inject constructor(
     private val paymentUseCases: PaymentUseCases,
     private val buildCieloPaymentUri: BuildCieloPaymentUriUseCase,
     private val parseCieloCallback: ParseCieloCallbackUseCase,
-    private val savedStateHandle: SavedStateHandle
+    private val savedStateHandle: SavedStateHandle,
+    private val observability: Observability = NoOpObservability
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<UiState>(UiState.Loading)
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
@@ -61,7 +70,7 @@ class EventsViewModel @Inject constructor(
     private var launchedPaymentKey: String? = null
 
     companion object {
-        const val MAX_QUANTITY_PER_ORDER = com.pedrosoares.cielosales.core.domain.model.PurchaseConstraints.MAX_TICKETS_PER_ORDER
+        const val MAX_QUANTITY_PER_ORDER = PurchaseConstraints.MAX_TICKETS_PER_ORDER
         private const val KEY_IDEMPOTENCY = "current_idempotency_key"
     }
 
@@ -105,6 +114,11 @@ class EventsViewModel @Inject constructor(
                     }
                 } catch (exception: Exception) {
                     if (exception is CancellationException) throw exception
+                    observability.record(
+                        ObservabilityErrorCode.PAYMENT_START_FAILED,
+                        ObservabilityStage.PAYMENT_START,
+                        exception
+                    )
                     _uiState.value = UiState.PaymentError(
                         UiText.StringResource(R.string.error_start_payment)
                     )
@@ -126,6 +140,11 @@ class EventsViewModel @Inject constructor(
                     launchPurchase(stored)
                 } catch (exception: Exception) {
                     if (exception is CancellationException) throw exception
+                    observability.record(
+                        ObservabilityErrorCode.PAYMENT_RETRY_FAILED,
+                        ObservabilityStage.RETRY,
+                        exception
+                    )
                     _uiState.value = UiState.PaymentError(UiText.StringResource(R.string.error_retry_payment), purchase)
                 }
             }
@@ -136,6 +155,10 @@ class EventsViewModel @Inject constructor(
         savedStateHandle[KEY_IDEMPOTENCY] = purchase.idempotencyKey
         val uri = buildCieloPaymentUri(purchase)
         _isPaymentLaunchInProgress.value = true
+        observability.track(
+            ObservabilityEventName.CIELO_LAUNCH_REQUESTED,
+            ObservabilityStage.CIELO_LAUNCH
+        )
         _effect.send(EventsEffect.LaunchCieloPayment(uri, purchase.idempotencyKey))
     }
 
@@ -152,6 +175,10 @@ class EventsViewModel @Inject constructor(
     }
 
     fun onPaymentResultReceived(uri: android.net.Uri) {
+        observability.track(
+            ObservabilityEventName.CALLBACK_RECEIVED,
+            ObservabilityStage.CALLBACK
+        )
         val expectedKey = savedStateHandle.get<String>(KEY_IDEMPOTENCY).orEmpty()
         processPaymentResult(parseCieloCallback(uri, expectedKey))
     }
@@ -161,6 +188,14 @@ class EventsViewModel @Inject constructor(
             paymentMutex.withLock {
                 _isPaymentLaunchInProgress.value = false
                 launchedPaymentKey = null
+                observability.record(
+                    ObservabilityErrorCode.CIELO_APP_NOT_FOUND,
+                    ObservabilityStage.CIELO_LAUNCH
+                )
+                observability.track(
+                    ObservabilityEventName.CIELO_LAUNCH_FAILED,
+                    ObservabilityStage.CIELO_LAUNCH
+                )
                 paymentUseCases.registerLaunchFailure(idempotencyKey)?.let { purchase ->
                     savedStateHandle[KEY_IDEMPOTENCY] = idempotencyKey
                     if (purchase.paymentStatus == PurchaseStatus.FAILED_TECHNICAL) {
@@ -177,6 +212,10 @@ class EventsViewModel @Inject constructor(
 
     fun onCieloPaymentLaunched(idempotencyKey: String) {
         launchedPaymentKey = idempotencyKey
+        observability.track(
+            ObservabilityEventName.CIELO_LAUNCH_SUCCEEDED,
+            ObservabilityStage.CIELO_LAUNCH
+        )
     }
 
     fun onHostResumed() {
@@ -184,6 +223,10 @@ class EventsViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
+                observability.track(
+                    ObservabilityEventName.APP_RETURNED_WITHOUT_CALLBACK,
+                    ObservabilityStage.RECOVERY
+                )
                 paymentUseCases.findPendingPurchase(idempotencyKey)?.let { purchase ->
                     _uiState.value = UiState.PaymentPending(purchase)
                 }
@@ -202,6 +245,10 @@ class EventsViewModel @Inject constructor(
                     launchedPaymentKey = null
                     val purchase = paymentUseCases.completePayment(result)
                     if (purchase == null) {
+                        observability.record(
+                            ObservabilityErrorCode.PURCHASE_NOT_FOUND,
+                            ObservabilityStage.CALLBACK
+                        )
                         _uiState.value = UiState.PaymentError(
                             UiText.StringResource(R.string.error_purchase_not_found)
                         )
@@ -210,12 +257,25 @@ class EventsViewModel @Inject constructor(
                     }
                 } catch (exception: Exception) {
                     if (exception is CancellationException) throw exception
+                    observability.record(
+                        ObservabilityErrorCode.CALLBACK_PERSISTENCE_FAILED,
+                        ObservabilityStage.PERSISTENCE,
+                        exception
+                    )
                     _uiState.value = UiState.PaymentError(
                         UiText.StringResource(R.string.error_database)
                     )
                 }
             }
         }
+    }
+
+    fun onQrCodeGenerationFailed(exception: Exception) {
+        observability.record(
+            ObservabilityErrorCode.QR_CODE_GENERATION_FAILED,
+            ObservabilityStage.QR_CODE,
+            exception
+        )
     }
 
     private fun showPersistedResult(purchase: Purchase, callback: PaymentResult? = null) {

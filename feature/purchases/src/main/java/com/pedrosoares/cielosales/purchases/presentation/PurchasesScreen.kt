@@ -48,14 +48,21 @@ import java.util.Locale
 @Composable
 fun PurchasesScreen(viewModel: PurchasesViewModel) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    PurchasesContent(state = state, onFilterSelected = viewModel::selectFilter)
+    PurchasesContent(
+        state = state,
+        onFilterSelected = viewModel::selectFilter,
+        onTicketQrOpened = viewModel::onTicketQrOpened,
+        onQrCodeGenerationFailed = viewModel::onQrCodeGenerationFailed
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun PurchasesContent(
     state: PurchasesUiState,
-    onFilterSelected: (PurchaseFilter) -> Unit
+    onFilterSelected: (PurchaseFilter) -> Unit,
+    onTicketQrOpened: () -> Unit = {},
+    onQrCodeGenerationFailed: (Exception) -> Unit = {}
 ) {
     var selectedPurchase by remember { mutableStateOf<Purchase?>(null) }
 
@@ -73,7 +80,10 @@ internal fun PurchasesContent(
                 items(state.purchases, key = { it.idempotencyKey }) { purchase ->
                     PurchaseItem(
                         purchase = purchase,
-                        onApprovedPurchaseSelected = { selectedPurchase = it }
+                        onApprovedPurchaseSelected = {
+                            onTicketQrOpened()
+                            selectedPurchase = it
+                        }
                     )
                 }
             }
@@ -81,7 +91,11 @@ internal fun PurchasesContent(
     }
 
     selectedPurchase?.let { purchase ->
-        TicketQrCodeDialog(purchase = purchase, onDismiss = { selectedPurchase = null })
+        TicketQrCodeDialog(
+            purchase = purchase,
+            onDismiss = { selectedPurchase = null },
+            onQrCodeGenerationFailed = onQrCodeGenerationFailed
+        )
     }
 }
 
@@ -136,9 +150,16 @@ private fun PurchaseItem(
 }
 
 @Composable
-private fun TicketQrCodeDialog(purchase: Purchase, onDismiss: () -> Unit) {
+private fun TicketQrCodeDialog(
+    purchase: Purchase,
+    onDismiss: () -> Unit,
+    onQrCodeGenerationFailed: (Exception) -> Unit
+) {
     val bitmap = remember(purchase.idempotencyKey) {
-        TicketQrCodeGenerator.generate(purchase.idempotencyKey)
+        TicketQrCodeGenerator.generate(
+            purchase.idempotencyKey,
+            onFailure = onQrCodeGenerationFailed
+        )
     }
     AlertDialog(
         onDismissRequest = onDismiss,

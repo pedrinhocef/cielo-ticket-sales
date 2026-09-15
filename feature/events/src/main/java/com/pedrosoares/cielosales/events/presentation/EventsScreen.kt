@@ -131,7 +131,10 @@ fun EventsScreen(
 
                 is UiState.PaymentSuccess -> {
                     val bitmap = remember(state.purchase.idempotencyKey) {
-                        TicketQrCodeGenerator.generate(state.purchase.idempotencyKey)
+                        TicketQrCodeGenerator.generate(
+                            state.purchase.idempotencyKey,
+                            onFailure = viewModel::onQrCodeGenerationFailed
+                        )
                     }
                     Column(
                         modifier = Modifier.fillMaxSize().padding(24.dp),

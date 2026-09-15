@@ -26,7 +26,7 @@ android {
 
 dependencies {
     implementation(project(":core"))
-    testImplementation(project(":feature:cielo"))
+    implementation(project(":core:observability"))
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)

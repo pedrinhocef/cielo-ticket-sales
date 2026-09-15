@@ -10,10 +10,18 @@ import com.pedrosoares.cielosales.core.domain.repository.PurchaseRepository
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import com.pedrosoares.cielosales.observability.api.Observability
+import com.pedrosoares.cielosales.observability.api.ObservabilityDimension
+import com.pedrosoares.cielosales.observability.api.ObservabilityEventName
+import com.pedrosoares.cielosales.observability.api.ObservabilityErrorCode
+import com.pedrosoares.cielosales.observability.api.ObservabilityStage
+import com.pedrosoares.cielosales.observability.api.record
+import com.pedrosoares.cielosales.observability.api.track
 
 @Singleton
 class RoomPurchaseRepository @Inject constructor(
-    private val purchaseDao: PurchaseDao
+    private val purchaseDao: PurchaseDao,
+    private val observability: Observability
 ) : PurchaseRepository {
     private companion object {
         /** Two rows let us distinguish one recoverable purchase from an ambiguous history. */
@@ -21,6 +29,12 @@ class RoomPurchaseRepository @Inject constructor(
     }
     override suspend fun createOrGetPending(purchase: Purchase): PendingPurchaseResult {
         val result = purchaseDao.createOrGetPending(purchase.toEntity())
+        observability.track(
+            ObservabilityEventName.PURCHASE_PERSISTED,
+            ObservabilityStage.PERSISTENCE,
+            ObservabilityDimension.RESULT to if (result.created) "CREATED" else "EXISTING",
+            ObservabilityDimension.STATUS to result.purchase.paymentStatus.name
+        )
         return if (result.created) {
             PendingPurchaseResult.Created(result.purchase.toDomain())
         } else {
@@ -39,13 +53,37 @@ class RoomPurchaseRepository @Inject constructor(
         reason: String?
     ): Boolean {
         require(status != PurchaseStatus.PENDING) { "A pending purchase must complete with a terminal status" }
-        return purchaseDao.updateStatusIfCurrent(
+        val updated = purchaseDao.updateStatusIfCurrent(
             key = key,
             currentStatus = PurchaseStatus.PENDING,
             status = status,
             transactionId = transactionId,
             reason = reason
         ) == 1
+        if (updated) {
+            observability.track(
+                ObservabilityEventName.PAYMENT_STATE_TRANSITION,
+                ObservabilityStage.PERSISTENCE,
+                ObservabilityDimension.PREVIOUS_STATUS to PurchaseStatus.PENDING.name,
+                ObservabilityDimension.STATUS to status.name
+            )
+        } else {
+            val stored = purchaseDao.getPurchaseByIdempotencyKey(key)
+            if (stored == null) {
+                observability.record(
+                    ObservabilityErrorCode.PURCHASE_NOT_FOUND,
+                    ObservabilityStage.PERSISTENCE
+                )
+            } else {
+                observability.track(
+                    ObservabilityEventName.LATE_CALLBACK_IGNORED,
+                    ObservabilityStage.PERSISTENCE,
+                    ObservabilityDimension.STATUS to stored.paymentStatus.name,
+                    ObservabilityDimension.RESULT to status.name
+                )
+            }
+        }
+        return updated
     }
 
     override suspend fun getPurchase(key: String): Purchase? {
@@ -57,6 +95,15 @@ class RoomPurchaseRepository @Inject constructor(
             status = PurchaseStatus.PENDING,
             limit = PENDING_PURCHASE_AMBIGUITY_LIMIT
         )
+        observability.track(
+            ObservabilityEventName.PAYMENT_RECOVERY_EVALUATED,
+            ObservabilityStage.RECOVERY,
+            ObservabilityDimension.RECOVERY_SOURCE to when (pending.size) {
+                0 -> "DATABASE_NONE"
+                1 -> "DATABASE"
+                else -> "DATABASE_AMBIGUOUS"
+            }
+        )
         return pending.singleOrNull()?.toDomain()
     }
 
@@ -64,14 +111,24 @@ class RoomPurchaseRepository @Inject constructor(
         purchases.map(PurchaseEntity::toDomain)
     }
 
-    override suspend fun resetTechnicalFailureForRetry(key: String): Boolean =
-        purchaseDao.updateStatusIfCurrent(
+    override suspend fun resetTechnicalFailureForRetry(key: String): Boolean {
+        val updated = purchaseDao.updateStatusIfCurrent(
             key = key,
             currentStatus = PurchaseStatus.FAILED_TECHNICAL,
             status = PurchaseStatus.PENDING,
             transactionId = null,
             reason = null
         ) == 1
+        if (updated) {
+            observability.track(
+                ObservabilityEventName.PAYMENT_STATE_TRANSITION,
+                ObservabilityStage.RETRY,
+                ObservabilityDimension.PREVIOUS_STATUS to PurchaseStatus.FAILED_TECHNICAL.name,
+                ObservabilityDimension.STATUS to PurchaseStatus.PENDING.name
+            )
+        }
+        return updated
+    }
 }
 
 private fun Purchase.toEntity() = PurchaseEntity(

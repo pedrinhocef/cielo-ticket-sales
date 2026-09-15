@@ -11,16 +11,21 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import com.pedrosoares.cielosales.observability.api.Observability
+import com.pedrosoares.cielosales.observability.api.ObservabilityErrorCode
+import io.mockk.mockk
+import io.mockk.verify
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 class CieloCallbackParserTest {
 
     private lateinit var parser: CieloCallbackParser
+    private val observability: Observability = mockk(relaxed = true)
 
     @Before
     fun setUp() {
-        parser = CieloCallbackParser()
+        parser = CieloCallbackParser(observability)
     }
 
     @Test
@@ -162,6 +167,9 @@ class CieloCallbackParserTest {
 
         assertTrue(result is PaymentResult.FailedTechnical)
         assertTrue((result as PaymentResult.FailedTechnical).message.contains("Correlation failure"))
+        verify {
+            observability.record(match { it.code == ObservabilityErrorCode.CALLBACK_CORRELATION_FAILED })
+        }
     }
 
     @Test

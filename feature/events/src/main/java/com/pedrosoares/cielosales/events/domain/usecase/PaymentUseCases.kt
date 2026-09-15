@@ -9,6 +9,12 @@ import com.pedrosoares.cielosales.core.domain.repository.PendingPurchaseResult
 import com.pedrosoares.cielosales.core.domain.repository.PurchaseRepository
 import java.util.UUID
 import javax.inject.Inject
+import com.pedrosoares.cielosales.observability.api.NoOpObservability
+import com.pedrosoares.cielosales.observability.api.Observability
+import com.pedrosoares.cielosales.observability.api.ObservabilityDimension
+import com.pedrosoares.cielosales.observability.api.ObservabilityEventName
+import com.pedrosoares.cielosales.observability.api.ObservabilityStage
+import com.pedrosoares.cielosales.observability.api.track
 
 class PaymentUseCases @Inject constructor(
     val recoverPendingPurchase: RecoverPendingPurchaseUseCase,
@@ -20,23 +26,39 @@ class PaymentUseCases @Inject constructor(
 )
 
 class RecoverPendingPurchaseUseCase @Inject constructor(
-    private val purchaseRepository: PurchaseRepository
+    private val purchaseRepository: PurchaseRepository,
+    private val observability: Observability = NoOpObservability
 ) {
     suspend operator fun invoke(savedIdempotencyKey: String?): Purchase? {
         val savedPurchase = savedIdempotencyKey
             ?.takeIf(String::isNotBlank)
             ?.let { purchaseRepository.getPurchase(it) }
-        return savedPurchase ?: purchaseRepository.getSinglePendingPurchase()
+        if (savedPurchase != null) {
+            observability.track(
+                ObservabilityEventName.PAYMENT_RECOVERED,
+                ObservabilityStage.RECOVERY,
+                ObservabilityDimension.RECOVERY_SOURCE to "SAVED_STATE",
+                ObservabilityDimension.STATUS to savedPurchase.paymentStatus.name
+            )
+            return savedPurchase
+        }
+        return purchaseRepository.getSinglePendingPurchase()
     }
 }
 
 class StartPaymentUseCase @Inject constructor(
-    private val purchaseRepository: PurchaseRepository
+    private val purchaseRepository: PurchaseRepository,
+    private val observability: Observability = NoOpObservability
 ) {
     suspend operator fun invoke(event: Event, quantity: Int): PendingPurchaseResult {
         val validQuantity = quantity.coerceIn(
             PurchaseConstraints.MIN_TICKETS_PER_ORDER,
             PurchaseConstraints.MAX_TICKETS_PER_ORDER
+        )
+        observability.track(
+            ObservabilityEventName.PAYMENT_START_REQUESTED,
+            ObservabilityStage.PAYMENT_START,
+            ObservabilityDimension.QUANTITY to validQuantity.toString()
         )
         return purchaseRepository.createOrGetPending(
             Purchase(
@@ -53,11 +75,17 @@ class StartPaymentUseCase @Inject constructor(
 }
 
 class RetryPaymentUseCase @Inject constructor(
-    private val purchaseRepository: PurchaseRepository
+    private val purchaseRepository: PurchaseRepository,
+    private val observability: Observability = NoOpObservability
 ) {
     suspend operator fun invoke(idempotencyKey: String): Purchase? {
         val stored = purchaseRepository.getPurchase(idempotencyKey) ?: return null
-        return when (stored.paymentStatus) {
+        observability.track(
+            ObservabilityEventName.PAYMENT_RETRY_REQUESTED,
+            ObservabilityStage.RETRY,
+            ObservabilityDimension.STATUS to stored.paymentStatus.name
+        )
+        val result = when (stored.paymentStatus) {
             PurchaseStatus.PENDING -> stored
             PurchaseStatus.FAILED_TECHNICAL -> {
                 if (!purchaseRepository.resetTechnicalFailureForRetry(stored.idempotencyKey)) null
@@ -65,6 +93,12 @@ class RetryPaymentUseCase @Inject constructor(
             }
             else -> stored
         }
+        observability.track(
+            ObservabilityEventName.PAYMENT_RETRY_COMPLETED,
+            ObservabilityStage.RETRY,
+            ObservabilityDimension.RESULT to (result?.paymentStatus?.name ?: "NOT_FOUND")
+        )
+        return result
     }
 }
 

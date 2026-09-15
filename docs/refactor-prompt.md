@@ -16,6 +16,7 @@ Amadurecer o MVP sem alterar o contrato Cielo que já funciona: reduzir a orques
 6. Manter eventos mockados para o MVP, mas isolar uma implementação `FakeEventRepository` atrás de uma interface de domínio reativa. Não adicionar API, Retrofit ou backend.
 7. Não inventar campos, SDKs ou comportamentos Cielo. Não versionar credenciais.
 8. Criar ou atualizar testes de use case, ViewModel, DAO e UI para process death, retorno sem callback, filtros e estados terminais.
+9. Toda telemetria deve usar `:core:observability`, ser tipada e sanitizada. Nunca registrar payload, URI completa, credencial, referência ou ID de transação; falhas de sinks não podem afetar o pagamento.
 
 ## Validação
 

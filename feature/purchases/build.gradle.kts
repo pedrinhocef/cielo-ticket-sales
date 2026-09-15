@@ -21,6 +21,7 @@ android {
 
 dependencies {
     implementation(project(":core"))
+    implementation(project(":core:observability"))
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui)

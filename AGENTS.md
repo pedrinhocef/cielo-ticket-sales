@@ -27,3 +27,11 @@
 - Colete efeitos de navegação/abertura externa respeitando o ciclo de vida e sem duplicar efeitos já consumidos.
 - Toda alteração no fluxo de pagamento exige testes de transição, callback tardio, retorno sem callback e process death.
 - Execute `./gradlew test` e `./gradlew :app:assembleDebug` antes de concluir uma alteração relevante.
+
+## Observabilidade
+
+- Registre eventos por meio do contrato `Observability`; features não podem depender diretamente de Logcat, Room ou provedores externos.
+- Nunca registre credenciais, payloads, URIs completas, referências de idempotência, IDs de transação ou mensagens de exceção não sanitizadas.
+- Use somente nomes, etapas, códigos e dimensões tipadas definidos em `:core:observability`.
+- Falhas de observabilidade nunca podem interromper ou alterar o fluxo de pagamento.
+- Diagnósticos locais usam banco separado, com retenção limitada; a tabela de compras não é armazenamento de analytics.
